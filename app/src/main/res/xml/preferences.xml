@@ -21,31 +21,19 @@
 <PreferenceScreen
     xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <SeekBarPreference
-        android:key="sample_interval_ms"
-        android:title="Sample interval"
-        android:summary="How often to measure screen luminance"
-        android:defaultValue="100"
-        android:min="3"
-        android:max="333"
-        android:showSeekBarValue="true" />
+<CheckBoxPreference
+    android:key="sample_interval_ms"
+    android:title="Sample interval"
+    android:summary="100ms default" />
 
-    <SeekBarPreference
-        android:key="cooldown_ms"
-        android:title="Toggle cooldown"
-        android:summary="Minimum time between overlay changes"
-        android:defaultValue="4000"
-        android:min="500"
-        android:max="30000"
-        android:showSeekBarValue="true" />
+<CheckBoxPreference
+    android:key="cooldown_ms"
+    android:title="Toggle cooldown"
+    android:summary="4000ms default" />
 
-    <SeekBarPreference
-        android:key="threshold"
-        android:title="Luminance threshold"
-        android:summary="Apply overlay above this % of full-white brightness"
-        android:defaultValue="50"
-        android:min="1"
-        android:max="99"
-        android:showSeekBarValue="true" />
+<CheckBoxPreference
+    android:key="threshold"
+    android:title="Luminance threshold"
+    android:summary="50% default" />
 
 </PreferenceScreen>

@@ -3,6 +3,7 @@ package com.xlumen.app;
 import android.app.Activity;
 import android.content.Intent;
 import android.media.projection.MediaProjectionManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -32,14 +33,25 @@ public class MainActivity extends Activity {
     private TextView mStatusText;
     private TextView mA11yStatusText;
 
+    private TextView mDebugText;
+
     // -------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
+        if (Build.VERSION.SDK_INT >= 33) requestPermissions(
+                new String[]{"android.permission.POST_NOTIFICATIONS"},
+                0
+              );
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        mDebugText = findViewById(R.id.txt_debug);
+        mDebugText.setText("onCreate OK");
 
         mProjMgr       = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
         mStartStopBtn  = findViewById(R.id.btn_start_stop);
