@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+    XLumen preferences layout.
+    Keys must match LumenPrefs constants exactly.
+
+    Sample interval: how often to grab a screen frame.
+    Stored as int milliseconds.  Range: 3ms to 333ms.
+    Default: 100ms (~10fps).
+
+    Cooldown: minimum time between overlay opacity changes.
+    Prevents thrashing when luminance hovers near threshold.
+    Stored as int milliseconds.  Range: 500ms to 30000ms.
+    Default: 4000ms (4 seconds).
+
+    Threshold: luminance fraction that triggers overlay.
+    Stored as int 1-99.  LumenPrefs.getThreshold() divides by 100.
+    Default: 50 (= 0.50 = 50% of full-white rod-weighted luminance).
+-->
+
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <SeekBarPreference
+        android:key="sample_interval_ms"
+        android:title="Sample interval"
+        android:summary="How often to measure screen luminance"
+        android:defaultValue="100"
+        android:min="3"
+        android:max="333"
+        android:showSeekBarValue="true" />
+
+    <SeekBarPreference
+        android:key="cooldown_ms"
+        android:title="Toggle cooldown"
+        android:summary="Minimum time between overlay changes"
+        android:defaultValue="4000"
+        android:min="500"
+        android:max="30000"
+        android:showSeekBarValue="true" />
+
+    <SeekBarPreference
+        android:key="threshold"
+        android:title="Luminance threshold"
+        android:summary="Apply overlay above this % of full-white brightness"
+        android:defaultValue="50"
+        android:min="1"
+        android:max="99"
+        android:showSeekBarValue="true" />
+
+</PreferenceScreen>

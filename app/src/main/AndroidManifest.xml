@@ -1,23 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
+
+<!--
+    XLumen AndroidManifest.xml
+
+    Permissions:
+        FOREGROUND_SERVICE - required to run LumenService in the foreground.
+        FOREGROUND_SERVICE_MEDIA_PROJECTION - required for MediaProjection
+            foreground service type on Android 14+.
+        POST_NOTIFICATIONS - required to show the foreground service notification.
+
+    Components:
+        MainActivity - handles MediaProjection permission request and start/stop.
+        SettingsActivity - user preferences screen.
+        LumenService - foreground service, screen capture, luminance computation.
+        LumenAccessibilityService - overlay drawing, enabled by user in Settings.
+-->
+
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.xlumen.app">
 
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
-        android:allowBackup="true"
+        android:label="XLumen"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.XLumen">
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".SettingsActivity"
+            android:label="XLumen Settings"
+            android:exported="false" />
+
+        <service
+            android:name=".LumenService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
         <service
             android:name=".LumenAccessibilityService"
@@ -31,6 +61,7 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+
     </application>
 
 </manifest>
