@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">XLumen</string>
+
+    <!-- Shown to the user in Settings > Accessibility > XLumen.
+         This is XLumen's one sentence to explain itself to a nervous user.
+         Keep it honest and specific — vague descriptions increase suspicion. -->
+    <string name="accessibility_service_description">
+        XLumen monitors screen brightness and applies a protective overlay
+        to preserve night vision and reduce eye strain. It does not read,
+        record, or transmit any screen content.
+    </string>
 </resources>

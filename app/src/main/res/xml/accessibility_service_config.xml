@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+    XLumen accessibility service configuration.
+
+    Android reads this file before launching the service — it determines
+    how XLumen appears in Settings > Accessibility and what it is allowed to do.
+
+    Why accessibilityEventTypes="typeWindowContentChanged":
+        XLumen doesn't actually need to react to UI events.  We declare this
+        as the minimum required value to satisfy the framework.  The actual
+        work is driven by LumenState on a timer, not by UI events.
+
+    Why canRetrieveWindowContent="false":
+        XLumen does not read window content.  MediaProjection handles screen
+        capture separately.  Declaring false here limits our footprint and
+        reduces user suspicion — we only ask for what we need.
+
+    Why notificationTimeout="100":
+        Minimum interval between event callbacks.  Largely irrelevant since
+        we ignore events anyway, but required by the framework.
+-->
+
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100"
+/>
