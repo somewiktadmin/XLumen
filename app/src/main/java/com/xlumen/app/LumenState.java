@@ -1,7 +1,7 @@
 package com.xlumen.app;
 
 /**
- * X-Lumen LumenState
+ * XLumen LumenState
  *
  * Single shared state object. All three services read and write here.
  * Volatile fields only — no synchronization overhead, no IPC.
