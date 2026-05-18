@@ -1,4 +1,4 @@
-package com.example.xlumen;
+package com.xlumen.app;
 
 import org.junit.Test;
 
