@@ -13,6 +13,7 @@ import android.media.Image;
 import android.media.ImageReader;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -70,6 +71,52 @@ public class LumenService extends Service {
     // Lifecycle
     // -------------------------------------------------------------------------
 
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent == null) {
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
+
+        try {
+            int    resultCode     = intent.getIntExtra(Extras.RESULT_CODE, -1);
+            Intent projectionData = intent.getParcelableExtra(Extras.PROJECTION_DATA);
+
+            //createNotificationChannel();
+
+            /*
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(NOTIF_ID, buildNotification("XLumen starting..."),
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+            } else {
+                startForeground(NOTIF_ID, buildNotification("XLumen starting..."));
+            }*/
+
+            //startForeground(NOTIF_ID, buildNotification("osc XLumen starting..."));
+
+            mHandler = new Handler(Looper.getMainLooper());
+
+            startProjection(resultCode, projectionData);
+            scheduleNextSample();
+
+        } catch (Exception e) {
+            // Write crash reason to file so MainActivity can read it
+            try {
+                java.io.FileWriter fw = new java.io.FileWriter(
+                        getFilesDir() + "/xlumen_debug.txt", true);
+                fw.write("LumenService crash: " + e.getClass().getName()
+                        + " - " + e.getMessage() + "\n");
+                fw.close();
+            } catch (Exception ignored) { }
+            stopSelf();
+        }
+
+        return START_REDELIVER_INTENT;
+    }
+
+    /*
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) {
@@ -88,7 +135,7 @@ public class LumenService extends Service {
         scheduleNextSample();
 
         return START_REDELIVER_INTENT;
-    }
+    }*/
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -107,13 +154,107 @@ public class LumenService extends Service {
     // -------------------------------------------------------------------------
 
     private void startProjection(int resultCode, Intent data) {
+
+        // startForeground MUST come before getMediaProjection on Android 14.
+        if (Build.VERSION.SDK_INT >= 34) {
+            createNotificationChannel();
+            startForeground(NOTIF_ID, buildNotification("XLumen running"),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+        } else {
+            createNotificationChannel();
+            startForeground(NOTIF_ID, buildNotification("XLumen running"));
+        }
+
         MediaProjectionManager mgr =
                 (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
         mProjection = mgr.getMediaProjection(resultCode, data);
 
+        if (Build.VERSION.SDK_INT >= 34) {
+            mProjection.registerCallback(new MediaProjection.Callback() {
+                @Override
+                public void onStop() {
+                    mRunning = false;
+                    tearDownProjection();
+                }
+            }, mHandler);
+        }
+
         DisplayMetrics metrics = new DisplayMetrics();
         ((WindowManager) getSystemService(WINDOW_SERVICE))
                 .getDefaultDisplay().getRealMetrics(metrics);
+
+        int w = metrics.widthPixels  / 8;
+        int h = metrics.heightPixels / 8;
+
+        mImageReader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2);
+        mVirtualDisplay = mProjection.createVirtualDisplay(
+                "XLumenCapture",
+                w, h, metrics.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                mImageReader.getSurface(), null, null
+        );
+
+        mRunning = true;
+    }
+
+    /*
+    private void startProjection(int resultCode, Intent data) {
+        MediaProjectionManager mgr =
+                (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+        mProjection = mgr.getMediaProjection(resultCode, data);
+
+        if (Build.VERSION.SDK_INT >= 34) {
+            mProjection.registerCallback(new MediaProjection.Callback() {
+                @Override
+                public void onStop() {
+                    mRunning = false;
+                    tearDownProjection();
+                }
+            }, mHandler);
+
+            startForeground(NOTIF_ID, buildNotification("XLumen running"),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+        } else {
+            startForeground(NOTIF_ID, buildNotification("XLumen running"));
+        }
+
+        DisplayMetrics metrics = new DisplayMetrics();
+        ((WindowManager) getSystemService(WINDOW_SERVICE))
+                .getDefaultDisplay().getRealMetrics(metrics);
+
+        int w = metrics.widthPixels  / 8;
+        int h = metrics.heightPixels / 8;
+
+        mImageReader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2);
+        mVirtualDisplay = mProjection.createVirtualDisplay(
+                "XLumenCapture",
+                w, h, metrics.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                mImageReader.getSurface(), null, null
+        );
+
+        mRunning = true;
+        Log.i(TAG, "Projection started at " + w + "x" + h);
+    }*/
+
+    /*
+    private void startProjection(int resultCode, Intent data) {
+        MediaProjectionManager mgr =
+                (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+        mProjection = mgr.getMediaProjection(resultCode, data);
+
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(NOTIF_ID, buildNotification("sp XLumen starting..."),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+        } else {
+            startForeground(NOTIF_ID, buildNotification("sp XLumen starting..."));
+        }
+
+        DisplayMetrics metrics = new DisplayMetrics();
+        ((WindowManager) getSystemService(WINDOW_SERVICE))
+                .getDefaultDisplay().getRealMetrics(metrics);
+
+        // rest of startProjection unchanged...
 
         // Capture at 1/8 linear resolution -- 1/64 of total pixels.
         // We only need luminance, not a viewable image.
@@ -131,7 +272,7 @@ public class LumenService extends Service {
 
         mRunning = true;
         Log.i(TAG, "Projection started at " + w + "x" + h);
-    }
+    }*/
 
     private void tearDownProjection() {
         if (mVirtualDisplay != null) { mVirtualDisplay.release(); mVirtualDisplay = null; }
@@ -168,22 +309,20 @@ public class LumenService extends Service {
      * Scotopic weights: R=0.06  G=0.67  B=0.27
      */
     private float computeScreenLuminance() {
-        Image image = null;
-        try {
-            image = mImageReader.acquireLatestImage();
+        try (Image image = mImageReader.acquireLatestImage()) {
             if (image == null) return -1f;
 
-            Image.Plane plane  = image.getPlanes()[0];
-            ByteBuffer  buf    = plane.getBuffer();
-            int         stride = plane.getRowStride();
-            int         w      = image.getWidth();
-            int         h      = image.getHeight();
+            Image.Plane plane = image.getPlanes()[0];
+            ByteBuffer buf = plane.getBuffer();
+            int stride = plane.getRowStride();
+            int w = image.getWidth();
+            int h = image.getHeight();
 
             long rSum = 0, gSum = 0, bSum = 0, count = 0;
             for (int y = 0; y < h; y++) {
                 for (int x = 0; x < w; x++) {
                     int idx = y * stride + x * 4;
-                    rSum += (buf.get(idx)     & 0xFF);
+                    rSum += (buf.get(idx) & 0xFF);
                     gSum += (buf.get(idx + 1) & 0xFF);
                     bSum += (buf.get(idx + 2) & 0xFF);
                     count++;
@@ -192,9 +331,9 @@ public class LumenService extends Service {
 
             if (count == 0) return -1f;
 
-            float rAvg = rSum / (float)(count * 255);
-            float gAvg = gSum / (float)(count * 255);
-            float bAvg = bSum / (float)(count * 255);
+            float rAvg = rSum / (float) (count * 255);
+            float gAvg = gSum / (float) (count * 255);
+            float bAvg = bSum / (float) (count * 255);
 
             // Scotopic-weighted luminance
             return 0.06f * rAvg + 0.67f * gAvg + 0.27f * bAvg;
@@ -202,8 +341,6 @@ public class LumenService extends Service {
         } catch (Exception e) {
             Log.w(TAG, "Luminance sample failed: " + e.getMessage());
             return -1f;
-        } finally {
-            if (image != null) image.close();
         }
     }
 
@@ -220,17 +357,17 @@ public class LumenService extends Service {
         switch (LumenState.mode) {
 
             case TINT:
-                // White background detection.
-                // High luminance = bright screen = apply warm tint.
-                // Opacity and red bias both scale with luminance.
-                LumenState.overlayOpacity = LumenState.screenLuminance * 0.6f;
+                // Minimum 15% overlay always applied -- never fully transparent.
+                // Scales up to 75% at maximum luminance.
+                // Red bias fixed at 0.8 -- warm tint, not pure red.
+                LumenState.overlayOpacity = 0.05f + (LumenState.screenLuminance * 0.70f);
                 LumenState.overlayRedBias = 0.8f;
                 break;
 
             case NIGHTSHOT:
                 // Hard lock.  Maximum overlay, maximum red bias.
                 // No gradual ramp -- a single white flash ruins dark adaptation.
-                LumenState.overlayOpacity = 0.95f;
+                LumenState.overlayOpacity = 0.75f;
                 LumenState.overlayRedBias = 1.0f;
                 break;
 
@@ -238,18 +375,18 @@ public class LumenService extends Service {
                 // TODO: drive from light sensor, not screen luminance.
                 // LumenState.ambientLux will be written by a SensorEventListener.
                 // Placeholder until sensor code is added.
-                LumenState.overlayOpacity = 0f;
+                LumenState.overlayOpacity = 0.05f;
                 break;
 
             case SCHEDULED:
                 // TODO: drive from time of day and sunset/sunrise calculation.
-                LumenState.overlayOpacity = 0f;
+                LumenState.overlayOpacity = 0.15f;
                 break;
 
             case MEDIA:
                 // Neutral dim only -- no red bias.
                 // Opacity driven by luminance, red bias forced to zero.
-                LumenState.overlayOpacity = LumenState.screenLuminance * 0.4f;
+                LumenState.overlayOpacity = 0.05f + LumenState.screenLuminance * 0.4f;
                 LumenState.overlayRedBias = 0f;
                 break;
         }

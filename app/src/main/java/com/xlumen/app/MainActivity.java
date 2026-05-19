@@ -1,11 +1,9 @@
 package com.xlumen.app;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
@@ -24,7 +22,8 @@ import android.widget.TextView;
  * Note: MediaProjection consent dialog re-appears after every reboot
  * on Android 10+.  This is intentional by Google and cannot be suppressed.
  */
-public class MainActivity extends Activity {
+//public class MainActivity extends Activity {
+public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
 
     private static final int REQUEST_MEDIA_PROJECTION = 100;
 
@@ -35,34 +34,91 @@ public class MainActivity extends Activity {
 
     private TextView mDebugText;
 
+    private androidx.activity.result.ActivityResultLauncher<Intent> mProjectionLauncher;
+
+    private void debug(String msg) {
+        try {
+            java.io.FileWriter fw = new java.io.FileWriter(
+                    getFilesDir() + "/xlumen_debug.txt", true);
+            fw.write(System.currentTimeMillis() + "  " + msg + "\n");
+            fw.close();
+        } catch (Exception e) {
+            mDebugText.append( msg + "\n" + e.toString() );
+            //sleep(999);
+        }
+    }
+
+
     // -------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
-        if (Build.VERSION.SDK_INT >= 33) requestPermissions(
-                new String[]{"android.permission.POST_NOTIFICATIONS"},
-                0
-              );
-
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mDebugText = findViewById(R.id.txt_debug);
-        mDebugText.setText("onCreate OK");
-
-        mProjMgr       = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
-        mStartStopBtn  = findViewById(R.id.btn_start_stop);
-        mStatusText    = findViewById(R.id.txt_status);
+        mProjMgr        = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+        mStartStopBtn   = findViewById(R.id.btn_start_stop);
+        mStatusText     = findViewById(R.id.txt_status);
         mA11yStatusText = findViewById(R.id.txt_a11y_status);
+        mDebugText      = findViewById(R.id.txt_debug);
+
+        debug("MainAct onCreate OK");
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            requestPermissions(
+                    new String[]{"android.permission.POST_NOTIFICATIONS"},
+                    0
+            );
+            debug("Notification permission requested");
+        }
+
+        mProjectionLauncher = registerForActivityResult(
+                new androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (mDebugText != null) debug("Launcher result received");
+                    if (result.getResultCode() != RESULT_OK || result.getData() == null) {
+                        if (mDebugText != null) debug("MediaProjection denied");
+                        return;
+                    }
+                    if (mDebugText != null) debug("Granted, starting service...");
+                    try {
+                        startLumenService(result.getResultCode(), result.getData());
+                        if (mDebugText != null) debug("Service started OK");
+                    } catch (Exception e) {
+                        if (mDebugText != null) debug("CRASH: " + e.getMessage());
+                    }
+                }
+        );
 
         mStartStopBtn.setOnClickListener(v -> onStartStopClicked());
 
         findViewById(R.id.btn_settings).setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class))
         );
+
+        findViewById(R.id.btn_read_debug).setOnClickListener(v -> {
+            try {
+                java.io.BufferedReader br = new java.io.BufferedReader(
+                        new java.io.FileReader(getFilesDir() + "/xlumen_debug.txt"));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line).append("\n");
+                br.close();
+                mDebugText.setText(sb.toString());
+            } catch (Exception e) {
+                mDebugText.setText("No debug log found");
+            }
+
+            // Reset debug log on each fresh display dump, persist through next crash
+            try {
+                new java.io.FileWriter(getFilesDir() + "/xlumen_debug.txt", false).close();
+            } catch (Exception ignored) { }
+            mDebugText.setText("MainAct read debug button OK");
+
+        });
+
     }
 
     @Override
@@ -76,29 +132,45 @@ public class MainActivity extends Activity {
     // -------------------------------------------------------------------------
 
     private void onStartStopClicked() {
+        debug("Start clicked");
         if (LumenState.enabled) {
+            debug("Stopping...");
             stopLumenService();
         } else {
-            // MediaProjection permission must be requested from an Activity.
-            // The result comes back in onActivityResult.
-            startActivityForResult(
-                    mProjMgr.createScreenCaptureIntent(),
-                    REQUEST_MEDIA_PROJECTION
-            );
+            debug("Requesting MediaProjection...");
+            try {
+                mProjectionLauncher.launch(mProjMgr.createScreenCaptureIntent());
+
+                /*bstartActivityForResult(
+                        mProjMgr.createScreenCaptureIntent(),
+                        REQUEST_MEDIA_PROJECTION
+                ); */
+
+                debug("MediaProjection dialog launched");
+            } catch (Exception e) {
+                debug("CRASH: " + e.getMessage());
+            }
         }
     }
 
+    /*
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (mDebugText != null) debug("onActivityResult fired");
         if (requestCode != REQUEST_MEDIA_PROJECTION) return;
-
         if (resultCode != RESULT_OK || data == null) {
-            mStatusText.setText("Screen capture permission denied.");
+            if (mDebugText != null) debug("MediaProjection denied");
             return;
         }
-
-        startLumenService(resultCode, data);
+        if (mDebugText != null) debug("Granted, starting service...");
+        try {
+            startLumenService(resultCode, data);
+            if (mDebugText != null) debug("Service started OK");
+        } catch (Exception e) {
+            if (mDebugText != null) debug("CRASH: " + e.getMessage());
+        }
     }
+    */
 
     private void startLumenService(int resultCode, Intent data) {
         Intent intent = new Intent(this, LumenService.class);
@@ -107,15 +179,15 @@ public class MainActivity extends Activity {
         startForegroundService(intent);
 
         LumenState.enabled = true;
-        mStatusText.setText("XLumen running.");
-        mStartStopBtn.setText("Stop");
+        mStatusText.append("XLumen running.");
+        mStartStopBtn.append("Stop");
     }
 
     private void stopLumenService() {
         stopService(new Intent(this, LumenService.class));
         LumenState.enabled = false;
-        mStatusText.setText("XLumen stopped.");
-        mStartStopBtn.setText("Start");
+        mStatusText.append("XLumen stopped.");
+        mStartStopBtn.append("Start");
     }
 
     // -------------------------------------------------------------------------
@@ -129,9 +201,9 @@ public class MainActivity extends Activity {
      */
     private void updateA11yStatus() {
         if (LumenAccessibilityService.isConnected()) {
-            mA11yStatusText.setText("Accessibility service: active");
+            mA11yStatusText.append("Accessibility service: active");
         } else {
-            mA11yStatusText.setText(
+            mA11yStatusText.append(
                     "Accessibility service not enabled.\n" +
                             "Go to Settings > Accessibility > XLumen and turn it on."
             );

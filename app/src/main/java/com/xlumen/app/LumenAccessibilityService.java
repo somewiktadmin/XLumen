@@ -107,13 +107,14 @@ public class LumenAccessibilityService extends AccessibilityService {
     private void applyOverlayState() {
         if (mOverlayView == null) return;
 
-        if (!LumenState.enabled) {
-            mOverlayView.setVisibility(View.GONE);
-            return;
-        }
+        float opacity = LumenState.overlayOpacity;
+        float redBias = LumenState.overlayRedBias;
 
-        float opacity  = LumenState.overlayOpacity;
-        float redBias  = LumenState.overlayRedBias;
+        if (opacity <= 0.25f) {
+            // Floor -- neutral dark, no color bias
+            opacity = 0.25f;
+            redBias = 0.0f;
+        }
 
         int alpha = (int)(opacity * 255);
         int red   = (int)(redBias * 255);
