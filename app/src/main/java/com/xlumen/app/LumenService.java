@@ -349,11 +349,18 @@ public class LumenService extends Service {
     // -------------------------------------------------------------------------
 
     private void updateOverlayFromMode() {
+
+        // Gate 1: service running but user has not activated XLumen.
+        // Write zeros and return -- overlay stays invisible.
+        // LumenAccessibilityService enforces this independently as well.
+        // Both gates must agree before any overlay is applied.
         if (!LumenState.enabled) {
             LumenState.overlayOpacity = 0f;
+            LumenState.overlayRedBias = 0f;
             return;
         }
 
+        // Beyond this point, XLumen is active and mode logic applies.
         switch (LumenState.mode) {
 
             case TINT:

@@ -50,6 +50,39 @@
         android:text="Settings" />
 
     <TextView
+        android:id="@+id/txt_a11y_warning"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="13sp"
+        android:paddingBottom="8dp"
+        android:text="IMPORTANT: When enabling XLumen in Accessibility Settings,
+Android will show warnings stating this app can observe your screen.
+These warnings are correct and expected.  XLumen reads screen brightness
+to protect your eyes.  It does not record, store, or transmit anything.
+Google's warnings will likely become more alarming in future Android versions.
+This is intentional on Google's part.  You have been warned." />
+
+    <!-- Opens top-level Accessibility Settings.
+         Safer choice - less likely to trigger Google version-specific snafus.
+         Recommended for first-time users. -->
+    <Button
+        android:id="@+id/btn_open_a11y_settings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Open Accessibility Settings"
+        android:layout_marginBottom="4dp" />
+
+    <!-- Opens XLumen-specific A11y page directly.
+         Convenience shortcut - may behave differently across Android versions.
+         Google has broken this deep link before and may again. -->
+    <Button
+        android:id="@+id/btn_open_a11y_xlumen"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Open XLumen Accessibility Page (may vary by Android version)"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
         android:id="@+id/txt_debug"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

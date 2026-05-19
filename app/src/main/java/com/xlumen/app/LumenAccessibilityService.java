@@ -103,16 +103,44 @@ public class LumenAccessibilityService extends AccessibilityService {
      *   redBias 0.0 = pure neutral dark (ARGB: alpha, 0, 0, 0)
      *   redBias 1.0 = full red tint     (ARGB: alpha, 255, 0, 0)
      *   Values between = interpolated
+     *
+     // The “68–95–99.7 rule”    68.27, 95.45, 99.74
+     //TODO: This service is malfunctioning.  (Settings accessibility page)
+     //Does my screen-reading read the value before or after overlay is applied?
+     //TODO: phone-in-pocket, intercept all taps, no-butt-dial
      */
+    private void applyOverlayState() {
+        if (mOverlayView == null) return;
+
+        if (!LumenState.enabled) {
+            mOverlayView.setBackgroundColor(Color.argb(0, 0, 0, 0));
+            return;
+        }
+
+        float opacity = Math.min(0.75f, Math.max(0.05f, LumenState.overlayOpacity));
+        float redBias = LumenState.overlayRedBias;
+
+        if (opacity <= 0.05f) {
+            redBias = 0.0f;
+        }
+
+        int alpha = (int)(opacity * 255);
+        int red   = (int)(redBias * 255);
+
+        mOverlayView.setBackgroundColor(Color.argb(alpha, red, 0, 0));
+    }
+
+    /*
     private void applyOverlayState() {
         if (mOverlayView == null) return;
 
         float opacity = LumenState.overlayOpacity;
         float redBias = LumenState.overlayRedBias;
 
-        if (opacity <= 0.25f) {
+
+        if (opacity <= 0.75f) {
             // Floor -- neutral dark, no color bias
-            opacity = 0.25f;
+            opacity = 0.75f;
             redBias = 0.0f;
         }
 
@@ -121,7 +149,7 @@ public class LumenAccessibilityService extends AccessibilityService {
 
         mOverlayView.setVisibility(View.VISIBLE);
         mOverlayView.setBackgroundColor(Color.argb(alpha, red, 0, 0));
-    }
+    }*/
 
     // -------------------------------------------------------------------------
     // Update loop
