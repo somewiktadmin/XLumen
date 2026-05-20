@@ -367,8 +367,8 @@ public class LumenService extends Service {
                 // Minimum 15% overlay always applied -- never fully transparent.
                 // Scales up to 75% at maximum luminance.
                 // Red bias fixed at 0.8 -- warm tint, not pure red.
-                LumenState.overlayOpacity = 0.05f + (LumenState.screenLuminance * 0.70f);
-                LumenState.overlayRedBias = 0.8f;
+                LumenState.overlayOpacity = 0.25f + (LumenState.screenLuminance * 0.70f);
+                LumenState.overlayRedBias = 0.0f;
                 break;
 
             case NIGHTSHOT:

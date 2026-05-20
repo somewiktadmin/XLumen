@@ -41,7 +41,8 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
     private static final int REQUEST_MEDIA_PROJECTION = 100;
 
     private MediaProjectionManager mProjMgr;
-    private Button   mStartStopBtn;
+    private Button mStartBtn;
+    private Button mStopBtn;
     private TextView mStatusText;
     private TextView mA11yStatusText;
 
@@ -54,6 +55,7 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
     private androidx.activity.result.ActivityResultLauncher<Intent> mProjectionLauncher;
 
 
+    //TODO: figure out why bumblebee Android Studio LOGCAT fails 100%
     private void debug(String msg) {
         try {
             java.text.SimpleDateFormat sdf =
@@ -66,10 +68,10 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
             fw.write(timestamp + "  " + msg + "\n");
             fw.close();
         } catch (Exception e) {
-            // Cannot write to debug file -- show error inline instead.
+            // Cannot write to debug file - show error inline instead.
             // This message survives only until the next setText/append call.
             // If the file write is failing consistently, this is the only place
-            // the error will ever be visible -- check it on the NEXT session
+            // the error will ever be visible - check it on the NEXT session
             // before tapping "Read Debug Log" which clears the file.
             if (mDebugText != null) {
                 mDebugText.append(msg + "\n" + e.toString() + "\n");
@@ -89,7 +91,9 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         mProjMgr        = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
-        mStartStopBtn   = findViewById(R.id.btn_start_stop);
+        mStartBtn = findViewById(R.id.btn_start);
+        mStopBtn  = findViewById(R.id.btn_stop);
+        //mStartStopBtn   = findViewById(R.id.btn_start_stop);
         mStatusText     = findViewById(R.id.txt_status);
         mA11yStatusText = findViewById(R.id.txt_a11y_status);
         mDebugText      = findViewById(R.id.txt_debug);
@@ -123,8 +127,6 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
             }
         });
 
-        //mStartStopBtn.setEnabled(false);
-
         debug("MainAct onCreate OK");
 
         if (Build.VERSION.SDK_INT >= 33) {
@@ -153,7 +155,9 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
                 }
         );
 
-        mStartStopBtn.setOnClickListener(v -> onStartStopClicked());
+        mStartBtn.setOnClickListener(v -> onStartClicked());
+        mStopBtn.setOnClickListener(v -> onStopClicked());
+        //mStartStopBtn.setOnClickListener(v -> onStartStopClicked());
 
         findViewById(R.id.btn_settings).setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class))
@@ -175,8 +179,9 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
             // Reset debug log on each fresh display dump, persist through next crash
             try {
                 new java.io.FileWriter(getFilesDir() + "/xlumen_debug.txt", false).close();
-            } catch (Exception ignored) { }
-            mDebugText.setText("MainAct read debug button OK");
+            } catch (Exception e) {
+                mDebugText.append( e.getMessage() );
+            }
 
         });
 
@@ -192,46 +197,35 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
     // Start / stop
     // -------------------------------------------------------------------------
 
-    private void onStartStopClicked() {
-        debug("Start clicked");
+    private void onStartClicked() {
+        // Gate: do not request MediaProjection if service already running.
         if (LumenState.enabled) {
-            debug("Stopping...");
-            stopLumenService();
-        } else {
-            debug("Requesting MediaProjection...");
-            try {
-                mProjectionLauncher.launch(mProjMgr.createScreenCaptureIntent());
-
-                /*bstartActivityForResult(
-                        mProjMgr.createScreenCaptureIntent(),
-                        REQUEST_MEDIA_PROJECTION
-                ); */
-
-                debug("MediaProjection dialog launched");
-            } catch (Exception e) {
-                debug("CRASH: " + e.getMessage());
-            }
-        }
-    }
-
-    /*
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (mDebugText != null) debug("onActivityResult fired");
-        if (requestCode != REQUEST_MEDIA_PROJECTION) return;
-        if (resultCode != RESULT_OK || data == null) {
-            if (mDebugText != null) debug("MediaProjection denied");
+            debug("onStartClicked: already running, ignoring");
             return;
         }
-        if (mDebugText != null) debug("Granted, starting service...");
+
+        debug("onStartClicked: Requesting MediaProjection...");
         try {
-            startLumenService(resultCode, data);
-            if (mDebugText != null) debug("Service started OK");
+            mProjectionLauncher.launch(mProjMgr.createScreenCaptureIntent());
         } catch (Exception e) {
-            if (mDebugText != null) debug("CRASH: " + e.getMessage());
+            debug("CRASH in onStartClicked: " + e.getMessage());
         }
+
+        //        startActivityForResult(
+        //                mProjMgr.createScreenCaptureIntent(),
+        //                REQUEST_MEDIA_PROJECTION
     }
-    */
+
+    private void onStopClicked() {
+        // Gate: do not stop if service not running.
+        if (!LumenState.enabled) {
+            debug("onStopClicked: not running, ignoring");
+            return;
+        }
+        debug("onStopClicked: Stopping LumenService...");
+        stopLumenService();
+    }
+
 
     private void startLumenService(int resultCode, Intent data) {
         Intent intent = new Intent(this, LumenService.class);
@@ -240,16 +234,21 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         startForegroundService(intent);
 
         LumenState.enabled = true;
-        mStatusText.append("XLumen running.");
-        mStartStopBtn.append("Stop");
+        mStartBtn.setEnabled(false);
+        mStopBtn.setEnabled(true);
+        mStatusText.setText("XLumen running.");
+        debug("startLumenService: XLumen running");
     }
 
     private void stopLumenService() {
         stopService(new Intent(this, LumenService.class));
         LumenState.enabled = false;
-        mStatusText.append("XLumen stopped.");
-        mStartStopBtn.append("Start");
+        mStartBtn.setEnabled(true);
+        mStopBtn.setEnabled(false);
+        mStatusText.setText("XLumen stopped.");
+        debug("stopLumenService: XLumen stopped");
     }
+
 
     // -------------------------------------------------------------------------
     // A11y service status and UI gating
@@ -271,8 +270,8 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
             mA11yStatusText.setText("Accessibility service: active");
             mA11yWarningText.setVisibility(android.view.View.VISIBLE);
             mA11yWarningText.setText(
-                    "ABOUT THE NEXT WARNING\n\n" +
-                            "Android is about to tell you XLumen can see everything\n" +
+                    "ABOUT THE SECOND WARNING\n\n" +
+                            "Android is about to tell you XLumen can see everything " +
                             "on your screen.  That warning is completely accurate.\n\n" +
                             "What XLumen actually does with that access:\n" +
                             "  - Measures average pixel brightness 10 times per second\n" +
@@ -283,78 +282,109 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
                             "  - Does not take screenshots\n" +
                             "  - Does not transmit anything to anyone\n" +
                             "  - Does not keep any history of what was on your screen\n\n" +
-                            "You have no way to verify this except to read the source\n" +
+                            "You have no way to verify this except to read the source " +
                             "code yourself.  It is public at github.com/somewiktadmin/XLumen\n\n" +
                             "Tap Start when ready.  Tap \"Start now\" in the next dialog.\n" +
                             "This dialog returns after every reboot.  That is Google policy."
             );
             mOpenA11ySettingsBtn.setVisibility(android.view.View.GONE);
             mOpenA11yXLumenBtn.setVisibility(android.view.View.GONE);
-            mStartStopBtn.setEnabled(true);
-            mStartStopBtn.setText("Start");
+
+            // Button states depend on whether service is already running.
+            if (LumenState.enabled) {
+                mStartBtn.setEnabled(false);
+                mStopBtn.setEnabled(true);
+                mStatusText.setText("XLumen running.");
+            } else {
+                mStartBtn.setEnabled(true);
+                mStopBtn.setEnabled(false);
+                mStatusText.setText("XLumen stopped.");
+            }
+
         } else {
             // A11y not connected -- show setup instructions, disable Start button.
             mA11yStatusText.setText(
-                    "Step 1: Tap below to open Accessibility Settings.\n" +
-                            "Find XLumen in the list and turn it on.\n" +
+                    "Step 1: Tap below to open Accessibility Settings.  " +
+                            "Find XLumen in the list and turn it on.  " +
                             "Then return here - Start will become available."
             );
             mA11yWarningText.setVisibility(android.view.View.VISIBLE);
             mA11yWarningText.setText(
-                    "IMPORTANT: When enabling XLumen in Accessibility Settings,\n" +
-                            "Android will show warnings stating this app can observe your screen.\n" +
-                            "These warnings are correct and expected.  XLumen reads screen brightness\n" +
-                            "to protect your eyes.  It does not record, store, or transmit anything.\n" +
-                            "Google warnings will likely become more alarming in future Android versions.\n" +
+                    "IMPORTANT: When enabling XLumen in Accessibility Settings, " +
+                            "Android will show warnings stating this app can observe your screen.  " +
+                            "These warnings are correct and expected.  XLumen reads screen brightness " +
+                            "to protect your eyes.  It does not record, store, or transmit anything.  " +
+                            "Google warnings will likely become more alarming in each successive Android version.  " +
                             "This is intentional on Google's part.  You have been warned."
             );
             mOpenA11ySettingsBtn.setVisibility(android.view.View.VISIBLE);
             mOpenA11yXLumenBtn.setVisibility(android.view.View.VISIBLE);
-            mStartStopBtn.setEnabled(false);
-            mStartStopBtn.setText("Enable Accessibility first (see above)");
+
+            mStartBtn.setEnabled(false);
+            mStopBtn.setEnabled(false);
+            //mStartStopBtn.setText("Enable Accessibility first (see above)");
         }
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Help dialogs -- stub, not yet wired to buttons
+    // -------------------------------------------------------------------------
+
+    /**
+     * TODO: wire to [More Info] button on pre-a11y warning screen.
+     * Shows extended explanation of why Google's a11y warnings appear,
+     * what "malfunctioning" means, and the disable/re-enable fix procedure.
+     */
+    private void showA11yHelpDialog() {
+        // TODO: create [More Info] button in activity_main.xml and wire here
+        // Text content ready below, dialog not yet built.
     /*
-    private void updateA11yStatus() {
-        if (LumenAccessibilityService.isConnected()) {
-            mA11yStatusText.setText("Accessibility service: active");
-            // A11y connected -- hide setup instructions, enable Start button.
-            mA11yWarningText.setVisibility(android.view.View.GONE);
-            mOpenA11ySettingsBtn.setVisibility(android.view.View.GONE);
-            mOpenA11yXLumenBtn.setVisibility(android.view.View.GONE);
-            mStartStopBtn.setEnabled(true);
-            mStartStopBtn.setText("Start");
-        } else {
-            mA11yStatusText.setText(
-                    "Step 1: Tap below to open Accessibility Settings.\n" +
-                            "Find XLumen in the list and turn it on.\n" +
-                            "Then return here - Start will become available."
-            );
-            // A11y not connected -- show setup instructions, disable Start button.
-            mA11yWarningText.setVisibility(android.view.View.VISIBLE);
-            mOpenA11ySettingsBtn.setVisibility(android.view.View.VISIBLE);
-            mOpenA11yXLumenBtn.setVisibility(android.view.View.VISIBLE);
-            mStartStopBtn.setEnabled(false);
-            mStartStopBtn.setText("Enable Accessibility first (see above)");
-        }
+    "IF GOOGLE SAYS XLUMEN IS MALFUNCTIONING:\n\n" +
+    "This is expected during early use.  Google monitors accessibility\n" +
+    "services aggressively and flags unexpected behavior.\n\n" +
+    "The fix is always the same:\n" +
+    "  1. Go to Settings > Accessibility > XLumen\n" +
+    "  2. Turn XLumen OFF\n" +
+    "  3. Wait 3 seconds\n" +
+    "  4. Turn XLumen back ON\n" +
+    "  5. Return here and tap Start\n\n" +
+    "This should become less frequent over time.  If it happens\n" +
+    "repeatedly, please report it at github.com/somewiktadmin/XLumen\n" +
+    "with your Android version and phone model."
+    */
+        throw new UnsupportedOperationException(
+                "showA11yHelpDialog not yet implemented -- see TODO above"
+        );
     }
 
+    /**
+     * TODO: wire to [More Info] button on pre-MediaProjection warning screen.
+     * Shows extended explanation of why Google's screen capture warning appears,
+     * what XLumen does and does not do with screen access, and points to
+     * open source code as verification.
+     */
+    private void showMediaProjectionHelpDialog() {
+        // TODO: create [More Info] button in activity_main.xml and wire here
+        // Text content ready below, dialog not yet built.
+    /*
+    "ABOUT THE SCREEN CAPTURE WARNING:\n\n" +
+    "Android will say XLumen can see everything on your screen.\n" +
+    "That warning is completely accurate.\n\n" +
+    "What XLumen actually does with that access:\n" +
+    "  - Measures average pixel brightness 10 times per second\n" +
+    "  - Uses that number to set overlay opacity\n" +
+    "  - Discards the data immediately after\n\n" +
+    "What XLumen does NOT do:\n" +
+    "  - Does not record or store screen contents\n" +
+    "  - Does not take screenshots\n" +
+    "  - Does not transmit anything to anyone\n" +
+    "  - Does not keep any history of what was on your screen\n\n" +
+    "You have no way to verify this except to read the source\n" +
+    "code yourself.  It is public at github.com/somewiktadmin/XLumen"
+    */
+        throw new UnsupportedOperationException(
+                "showMediaProjectionHelpDialog not yet implemented -- see TODO above"
+        );
+    }
 
-    private void updateA11yStatus() {
-        if (LumenAccessibilityService.isConnected()) {
-            mA11yStatusText.setText("Accessibility service: active");
-            // Prerequisite met -- Start button now available
-            mStartStopBtn.setEnabled(true);
-            mStartStopBtn.setText("Start");
-        } else {
-            mA11yStatusText.setText(
-                    "Step 1: Go to Settings > Accessibility > XLumen and turn it on.\n" +
-                            "Then return here and tap Start.");
-            // Prerequisite not met -- Start button locked until a11y service connects.
-            // Button text explains why it is disabled, not just silently greyed out.
-            mStartStopBtn.setEnabled(false);
-            mStartStopBtn.setText("Enable Accessibility first (see above)");
-        }
-    }*/
 }

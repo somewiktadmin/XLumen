@@ -17,9 +17,9 @@ public class LumenState {
 
     // --- Overlay parameters ---
     // opacity: 0.0 = invisible, 1.0 = fully opaque
-    public static volatile float overlayOpacity = 0.0f;
+    public static volatile float overlayOpacity = 0.05f;
     // redBias: 0.0 = neutral dark, 1.0 = maximum red tint
-    public static volatile float overlayRedBias = 0.5f;
+    public static volatile float overlayRedBias = 0.0f;
 
     // --- Ambient light (Mode 3) ---
     public static volatile float ambientLux = -1f;
