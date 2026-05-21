@@ -12,6 +12,12 @@ public class LumenState {
     // --- Master switch ---
     public static volatile boolean enabled = false;
 
+    // Current toggle of a11y "Color invert"
+    public static volatile boolean invertEnabled = false;
+
+    // --- Whitebomb state ---
+    public static volatile boolean whiteBombActive = false;
+
     // --- Current mode ---
     public static volatile Mode mode = Mode.TINT;
 

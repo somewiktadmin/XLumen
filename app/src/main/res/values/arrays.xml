@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    XLumen res/values/arrays.xml
+
+    String arrays for ListPreference entries in res/xml/preferences.xml.
+    Each array pair: _entries holds display labels, _values holds the
+    stored preference value that LumenPrefs reads back.
+
+    pixel_sample_mode: controls how many pixels processFrame() examines.
+      STRIDE_65 - one pixel per 65, linear drift across rows, fast.
+      FULL      - every pixel, exhaustive.
+-->
+<resources>
+    <string-array name="pixel_sample_mode_entries">
+        <item>Stride-65 (fast, recommended)</item>
+        <item>Full scan (exhaustive)</item>
+    </string-array>
+    <string-array name="pixel_sample_mode_values">
+        <item>STRIDE_65</item>
+        <item>FULL</item>
+    </string-array>
+</resources>

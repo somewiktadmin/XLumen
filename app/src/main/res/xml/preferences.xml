@@ -6,34 +6,76 @@
 
     Sample interval: how often to grab a screen frame.
     Stored as int milliseconds.  Range: 3ms to 333ms.
-    Default: 100ms (~10fps).
+    Default: 100ms.
 
-    Cooldown: minimum time between overlay opacity changes.
-    Prevents thrashing when luminance hovers near threshold.
+    Cooldown: minimum time between whitebomb triggers.
     Stored as int milliseconds.  Range: 500ms to 30000ms.
-    Default: 4000ms (4 seconds).
+    Default: 3000ms.
 
-    Threshold: luminance fraction that triggers overlay.
+    Threshold: fraction of pixels that must be near-white to trigger.
     Stored as int 1-99.  LumenPrefs.getThreshold() divides by 100.
-    Default: 50 (= 0.50 = 50% of full-white rod-weighted luminance).
+    Default: 10 (= 10% of sampled pixels near-white).
+
+    Whitebomb brightness: SCREEN_BRIGHTNESS value slammed on trigger.
+    Stored as int 0-255.  Default: 10.
+
+    Pixel sample mode: FULL scans every pixel, STRIDE_65 skips 64 between
+    each sample.  STRIDE_65 is the default and is sufficient for full-screen
+    flashes.  FULL is available for paranoid users or future tuning.
+
+    Write settings trusted: gates SCREEN_BRIGHTNESS hammering.
+    Requires WRITE_SETTINGS permission granted by user in system settings.
 -->
 
 <PreferenceScreen
     xmlns:android="http://schemas.android.com/apk/res/android">
 
-<CheckBoxPreference
-    android:key="sample_interval_ms"
-    android:title="Sample interval"
-    android:summary="100ms default" />
+    <EditTextPreference
+        android:key="sample_interval_ms"
+        android:title="Sample interval (ms)"
+        android:summary="100ms default"
+        android:defaultValue="100"
+        android:inputType="number" />
 
-<CheckBoxPreference
-    android:key="cooldown_ms"
-    android:title="Toggle cooldown"
-    android:summary="4000ms default" />
+    <EditTextPreference
+        android:key="cooldown_ms"
+        android:title="Whitebomb cooldown (ms)"
+        android:summary="3000ms default"
+        android:defaultValue="3000"
+        android:inputType="number" />
 
-<CheckBoxPreference
-    android:key="threshold"
-    android:title="Luminance threshold"
-    android:summary="50% default" />
+    <EditTextPreference
+        android:key="threshold"
+        android:title="Luminance threshold (%)"
+        android:summary="50% default"
+        android:defaultValue="50"
+        android:inputType="number" />
+
+    <CheckBoxPreference
+        android:key="whitebomb_enabled"
+        android:title="Whitebomb protection"
+        android:summary="Slam overlay and brightness on sudden white flash"
+        android:defaultValue="true" />
+
+    <EditTextPreference
+        android:key="whitebomb_brightness"
+        android:title="Whitebomb brightness floor (0-255)"
+        android:summary="System brightness slammed to this on trigger.  Default: 10"
+        android:defaultValue="10"
+        android:inputType="number" />
+
+    <ListPreference
+        android:key="pixel_sample_mode"
+        android:title="Pixel sampling mode"
+        android:summary="STRIDE_65 is faster.  FULL is exhaustive."
+        android:entries="@array/pixel_sample_mode_entries"
+        android:entryValues="@array/pixel_sample_mode_values"
+        android:defaultValue="STRIDE_65" />
+
+    <CheckBoxPreference
+        android:key="write_settings_trusted"
+        android:title="Allow system brightness control"
+        android:summary="Requires &apos;Modify system settings&apos; permission.  Tap to enable, then grant in the system dialog that follows."
+        android:defaultValue="false" />
 
 </PreferenceScreen>
