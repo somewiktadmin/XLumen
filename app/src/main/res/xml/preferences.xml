@@ -1,30 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <!--
-    XLumen preferences layout.
+    XLumen res/xml/preferences.xml
+
     Keys must match LumenPrefs constants exactly.
+    LumenService re-reads LumenPrefs each sample cycle so changes
+    take effect immediately without restarting the service.
+
+    EditTextPreference stores values as strings internally regardless
+    of inputType.  LumenPrefs.parseInt() handles the conversion.
 
     Sample interval: how often to grab a screen frame.
-    Stored as int milliseconds.  Range: 3ms to 333ms.
-    Default: 100ms.
+    Stored as string ms.  Range: 3ms to 333ms.  Default: 100ms.
 
-    Cooldown: minimum time between whitebomb triggers.
-    Stored as int milliseconds.  Range: 500ms to 30000ms.
-    Default: 3000ms.
+    Cooldown: minimum time between flash guard triggers.
+    Stored as string ms.  Range: 500ms to 30000ms.  Default: 3000ms.
 
-    Threshold: fraction of pixels that must be near-white to trigger.
-    Stored as int 1-99.  LumenPrefs.getThreshold() divides by 100.
-    Default: 10 (= 10% of sampled pixels near-white).
+    Threshold: fraction of sampled pixels that must be near-white
+    to trigger flash guard.  Stored as string int 1-99.
+    LumenPrefs.getThreshold() divides by 100.  Default: 10 (= 10%).
 
-    Whitebomb brightness: SCREEN_BRIGHTNESS value slammed on trigger.
-    Stored as int 0-255.  Default: 10.
+    Flash guard enabled: master toggle for flash detection and response.
+    CheckBoxPreference, stored as boolean.  Default: true.
 
-    Pixel sample mode: FULL scans every pixel, STRIDE_65 skips 64 between
-    each sample.  STRIDE_65 is the default and is sufficient for full-screen
-    flashes.  FULL is available for paranoid users or future tuning.
+    Flash guard brightness: SCREEN_BRIGHTNESS value slammed on trigger.
+    Stored as string int 0-255.  Default: 10.
+    Only applied if write_settings_trusted is true and permission granted.
+
+    Pixel sample mode: STRIDE_65 samples one pixel per 65, fast and
+    sufficient for full-screen flashes.  FULL scans every pixel,
+    exhaustive, use for diagnostics only.
+    ListPreference, stored as string.  Default: STRIDE_65.
 
     Write settings trusted: gates SCREEN_BRIGHTNESS hammering.
-    Requires WRITE_SETTINGS permission granted by user in system settings.
+    CheckBoxPreference, stored as boolean.  Default: false.
+    Flipping this on fires ACTION_MANAGE_WRITE_SETTINGS if not yet granted.
 -->
 
 <PreferenceScreen
@@ -39,27 +49,27 @@
 
     <EditTextPreference
         android:key="cooldown_ms"
-        android:title="Whitebomb cooldown (ms)"
+        android:title="Flash guard cooldown (ms)"
         android:summary="3000ms default"
         android:defaultValue="3000"
         android:inputType="number" />
 
     <EditTextPreference
         android:key="threshold"
-        android:title="Luminance threshold (%)"
-        android:summary="50% default"
-        android:defaultValue="50"
+        android:title="Flash trigger threshold (%)"
+        android:summary="10% default"
+        android:defaultValue="10"
         android:inputType="number" />
 
     <CheckBoxPreference
-        android:key="whitebomb_enabled"
-        android:title="Whitebomb protection"
-        android:summary="Slam overlay and brightness on sudden white flash"
+        android:key="flashguard_enabled"
+        android:title="Flash guard"
+        android:summary="Slam overlay and brightness on sudden bright flash"
         android:defaultValue="true" />
 
     <EditTextPreference
-        android:key="whitebomb_brightness"
-        android:title="Whitebomb brightness floor (0-255)"
+        android:key="flashguard_brightness"
+        android:title="Flash guard brightness floor (0-255)"
         android:summary="System brightness slammed to this on trigger.  Default: 10"
         android:defaultValue="10"
         android:inputType="number" />

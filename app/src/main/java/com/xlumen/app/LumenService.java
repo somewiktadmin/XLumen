@@ -36,7 +36,7 @@ import java.util.ArrayDeque;
  * Responsibilities:
  *   1. Capture screen frames via MediaProjection at a user-configured rate
  *   2. Compute rod-sensitivity-weighted luminance from subsampled pixels
- *   3. Detect whitebomb frames and apply protective response
+ *   3. Detect flashguard frames and apply protective response
  *   4. Write results to LumenState for LumenAccessibilityService to act on
  *   5. Read light sensor for Mode 3 (RESPONSIVE)
  *
@@ -56,9 +56,9 @@ public class LumenService extends Service {
 
     private static final String TAG = "XLumen";
 
-    // =========================================================================
+    // =====================================
     // Constants
-    // =========================================================================
+    // =====================================
 
     /** Android notification channel ID.  Must be stable across versions. */
     public static final String CHANNEL_ID = "xlumen_service";
@@ -67,11 +67,11 @@ public class LumenService extends Service {
     public static final int NOTIF_ID = 1;
 
     /** Number of unique lum:overlay pairs retained in the notification history line. */
-    private static final int HISTORY_SIZE = 6;
+    private static final int HISTORY_SIZE = 5;
 
-    // =========================================================================
+    // =====================================
     // Fields
-    // =========================================================================
+    // =====================================
 
     private MediaProjection mProjection;
     private VirtualDisplay  mVirtualDisplay;
@@ -79,8 +79,8 @@ public class LumenService extends Service {
     private Handler         mHandler;
     private boolean         mRunning = false;
 
-    /** System.currentTimeMillis() value before which whitebomb response is suppressed. */
-    private long mWhiteBombCooldownUntil = 0;
+    /** System.currentTimeMillis() value before which flashguard response is suppressed. */
+    private long mFlashGuardCooldownUntil = 0;
 
     /** Last lum:overlay pair written to history.  Duplicate suppression. */
     private String lastMappingPair = "";
@@ -88,14 +88,14 @@ public class LumenService extends Service {
     /** Ring buffer of recent unique lum:overlay pairs for notification line 2. */
     private final ArrayDeque<String> mappingHistory = new ArrayDeque<>();
 
-    // =========================================================================
+    // =====================================
     // debug() - LOGCAT unavailable in Bumblebee; this is the only survivor
-    // =========================================================================
+    // =====================================
 
     /**
      * Appends msg to xlumen_debug.txt in app-private files dir.
      * Called throughout the service for tracing startup, mode changes,
-     * and whitebomb events.  LOGCAT is non-functional in this build
+     * and flashguard events.  LOGCAT is non-functional in this build
      * environment - this file is the only persistent log.
      *
      * Read via MainActivity "Read Debug Log" button.
@@ -113,20 +113,20 @@ public class LumenService extends Service {
         }
     }
 
-    // =========================================================================
+    // =====================================
     // Inner classes
-    // =========================================================================
+    // =====================================
 
     /**
      * Carries both outputs of a single pixel pass through processFrame().
-     * Avoids acquiring the image twice or splitting luminance and whitebomb
+     * Avoids acquiring the image twice or splitting luminance and flashguard
      * detection into separate methods with separate frame acquisitions.
      */
     private static class FrameResult {
         /** Scotopic-weighted luminance, 0.0..1.0.  -1.0 on failure. */
         float   luminance;
         /** True if more than 10% of sampled pixels are near-white (R,G,B > 220). */
-        boolean isWhiteBomb;
+        boolean isFlashing;
     }
 
     /**
@@ -206,9 +206,9 @@ public class LumenService extends Service {
         }
     }
 
-    // =========================================================================
+    // =====================================
     // Lifecycle
-    // =========================================================================
+    // =====================================
 
     /**
      * Entry point when MainActivity fires startForegroundService().
@@ -272,9 +272,9 @@ public class LumenService extends Service {
         super.onDestroy();
     }
 
-    // =========================================================================
+    // =====================================
     // MediaProjection setup / teardown
-    // =========================================================================
+    // =====================================
 
     /**
      * Initializes the foreground notification, MediaProjection, ImageReader,
@@ -284,7 +284,7 @@ public class LumenService extends Service {
      * must precede getMediaProjection - this ordering is enforced here.
      *
      * VirtualDisplay is created at 1/8 screen resolution.  This is intentional:
-     * full resolution is not needed for luminance or whitebomb detection, and
+     * full resolution is not needed for luminance or flashguard detection, and
      * the reduced size cuts pixel processing cost by 64x.
      *
      * @param resultCode     from MediaProjection permission dialog
@@ -343,9 +343,9 @@ public class LumenService extends Service {
         if (mProjection     != null) { mProjection.stop();        mProjection     = null; }
     }
 
-    // =========================================================================
+    // =====================================
     // Sampling loop
-    // =========================================================================
+    // =====================================
 
     /**
      * Posts the next doSample() call to mHandler after the user-configured interval.
@@ -355,14 +355,17 @@ public class LumenService extends Service {
     private void scheduleNextSample() {
         if (!mRunning) return;
         LumenPrefs prefs = new LumenPrefs(this);
-        mHandler.postDelayed(this::doSample, prefs.getSampleIntervalMs());
+        int interval = prefs.getSampleIntervalMs();
+        debug("scheduleNextSample: interval=" + interval);
+        mHandler.postDelayed(this::doSample, interval);
+        //mHandler.postDelayed(this::doSample, prefs.getSampleIntervalMs());
     }
 
     /**
      * Core sample cycle.  Called on mHandler at the configured interval.
      *
      * Calls processFrame() for a single-pass pixel analysis, then branches:
-     *   - whitebomb detected and enabled and cooldown expired: applyWhiteBombResponse()
+     *   - flashguard detected and enabled and cooldown expired: applyFlashGuard()
      *   - otherwise: normal mode logic via updateOverlayFromMode()
      *
      * recordMappingHistory() and updateNotification() run every cycle
@@ -377,19 +380,24 @@ public class LumenService extends Service {
             LumenState.screenLuminance = result.luminance;
 
             LumenPrefs prefs = new LumenPrefs(this);
-            if (prefs.isWhitebombEnabled() && result.isWhiteBomb) {
+            if (prefs.isFlashGuardEnabled() && result.isFlashing) {
                 long now = System.currentTimeMillis();
-                if (now > mWhiteBombCooldownUntil) {
-                    mWhiteBombCooldownUntil = now + prefs.getCooldownMs();
-                    applyWhiteBombResponse();
+                if (now > mFlashGuardCooldownUntil) {
+                    mFlashGuardCooldownUntil = now + prefs.getCooldownMs();
+                    applyFlashGuard();
                 }
                 // else: in cooldown, response already latched, do nothing
             } else {
-                LumenState.whiteBombActive = false;
+                LumenState.flashGuardActive = false;
                 updateOverlayFromMode();
             }
 
             recordMappingHistory();
+
+            debug("doSample: lum=" + result.luminance
+                    + " isFlashing=" + result.isFlashing
+                    + " flashGuardEnabled=" + prefs.isFlashGuardEnabled());
+
         }
 
         updateNotification();
@@ -406,7 +414,7 @@ public class LumenService extends Service {
      *               roughly 1/64 of pixels, adequate for full-screen events
      *
      * Near-white threshold: R > 220 AND G > 220 AND B > 220.
-     * Whitebomb flag set if more than 10% of sampled pixels are near-white.
+     * Flash guard flag set if more than 10% of sampled pixels are near-white.
      *
      * Scotopic weights: R=0.06  G=0.67  B=0.27
      *
@@ -415,7 +423,7 @@ public class LumenService extends Service {
     private FrameResult processFrame() {
         FrameResult result    = new FrameResult();
         result.luminance      = -1f;
-        result.isWhiteBomb    = false;
+        result.isFlashing    = false;
 
         try (Image image = mImageReader.acquireLatestImage()) {
             if (image == null) return result;
@@ -466,7 +474,7 @@ public class LumenService extends Service {
             float bAvg = bSum / (float)(total * 255);
 
             result.luminance   = 0.06f * rAvg + 0.67f * gAvg + 0.27f * bAvg;
-            result.isWhiteBomb = (white * 100 / total) > 10;
+            result.isFlashing = (white * 100 / total) > 10;
 
         } catch (Exception e) {
             Log.e(TAG, "processFrame failed: " + e);
@@ -476,7 +484,7 @@ public class LumenService extends Service {
     }
 
     /**
-     * Responds to a detected whitebomb frame.
+     * Responds to a detected flashguard frame.
      *
      * Two simultaneous actions:
      *   1. Slams overlay to 69% via LumenState - LumenAccessibilityService
@@ -485,13 +493,13 @@ public class LumenService extends Service {
      *      Settings.System.SCREEN_BRIGHTNESS - only if the user has both
      *      enabled the trust toggle and granted WRITE_SETTINGS permission.
      *
-     * LumenState.whiteBombActive drives the [MAX] title in buildNotification().
-     * Cleared by doSample() when no whitebomb is detected and cooldown has expired.
+     * LumenState.flashGuardActive drives the [MAX] title in buildNotification().
+     * Cleared by doSample() when no flashguard is detected and cooldown has expired.
      */
-    private void applyWhiteBombResponse() {
+    private void applyFlashGuard() {
         LumenState.overlayOpacity  = 0.69f;
         LumenState.overlayRedBias  = 0f;
-        LumenState.whiteBombActive = true;
+        LumenState.flashGuardActive = true;
 
         LumenPrefs prefs = new LumenPrefs(this);
         if (prefs.isWriteSettingsTrusted()
@@ -499,22 +507,22 @@ public class LumenService extends Service {
             android.provider.Settings.System.putInt(
                     getContentResolver(),
                     android.provider.Settings.System.SCREEN_BRIGHTNESS,
-                    prefs.getWhitebombBrightness()
+                    prefs.getFlashGuardBrightness()
             );
         }
 
-        debug("applyWhiteBombResponse: overlay=69% brightness=" +
-                prefs.getWhitebombBrightness());
+        debug("applyFlashGuard: overlay=69% brightness=" +
+                prefs.getFlashGuardBrightness());
         updateNotification();
     }
 
-    // =========================================================================
+    // =====================================
     // Mode logic - writes to LumenState for overlay to consume
-    // =========================================================================
+    // =====================================
 
     /**
      * Translates current mode and screenLuminance into overlay parameters.
-     * Called every sample cycle when no whitebomb response is active.
+     * Called every sample cycle when no flashguard response is active.
      *
      * Gate: if LumenState.enabled is false, zeroes both opacity and redBias
      * and returns immediately.  LumenAccessibilityService has an independent
@@ -567,9 +575,9 @@ public class LumenService extends Service {
         }
     }
 
-    // =========================================================================
+    // =====================================
     // Notification (shader drop-down)
-    // =========================================================================
+    // =====================================
 
     /**
      * Creates the notification channel on first call.  Safe to call repeatedly -
@@ -631,6 +639,7 @@ public class LumenService extends Service {
         for (String pair : mappingHistory) {
             if (!first) sb.append(" ");
             sb.append(pair);
+            if (first && LumenState.flashGuardActive) sb.append("-M");
             first = false;
         }
         return sb.toString();
@@ -639,7 +648,7 @@ public class LumenService extends Service {
     /**
      * Builds the foreground notification shown in the shader drop-down.
      *
-     * Title: "XLumen [MAX]" during whitebomb response, "XLumen" otherwise.
+     * Title: "XLumen [MAX]" during flashguard response, "XLumen" otherwise.
      * Line 1: lum=0.13 overlay=15% invert=off
      * Line 2: recent unique lum:overlay pairs, space-separated
      *
@@ -659,7 +668,7 @@ public class LumenService extends Service {
         String line2 = buildHistoryString();
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle(LumenState.whiteBombActive ? "XLumen [MAX]" : "XLumen")
+                .setContentTitle(LumenState.flashGuardActive ? "XLumen [MAX]" : "XLumen")
                 .setContentText(line1)
                 .setStyle(new NotificationCompat.BigTextStyle()
                         .bigText(line1 + "\n" + line2))
@@ -668,13 +677,13 @@ public class LumenService extends Service {
                 .build();
     }
 
-    // =========================================================================
+    // =====================================
     // Dead code - retained for reference
-    // =========================================================================
+    // =====================================
 
     /**
      * Original single-pass luminance computation.
-     * Superseded by processFrame(), which combines luminance and whitebomb
+     * Superseded by processFrame(), which combines luminance and flashguard
      * detection in one pixel pass and supports STRIDE_65 sampling.
      *
      * Retained for diffing and fallback reference.  Do not call.
