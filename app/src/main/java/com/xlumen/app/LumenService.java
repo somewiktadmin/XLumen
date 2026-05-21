@@ -74,6 +74,23 @@ public class LumenService extends Service {
     // - Whitebomb -
     private long mWhiteBombCooldownUntil = 0;
 
+
+    /**
+     * This debug work-around is because LOGCAT does not work in bumblebee
+     * @param msg
+     */
+    public void debug(String msg) {
+        try {
+            java.io.FileWriter fw = new java.io.FileWriter(
+                    getFilesDir() + "/xlumen_debug.txt", true);
+            fw.append(msg + "\n");
+            fw.close();
+        } catch (Exception e) {
+            Log.e(TAG, "debug: ", e);
+        }
+    }
+
+
     // FrameResult carries both outputs of a single pixel pass.
     private static class FrameResult {
         float luminance;
@@ -161,19 +178,18 @@ public class LumenService extends Service {
     }
 
 
-
-
-    // - Intent extras -
+    /**
+     * Intent extras
+     */
     public static class Extras {
         public static final String RESULT_CODE     = "result_code";
         public static final String PROJECTION_DATA = "projection_data";
     }
 
 
-    /*
+    /**
      * Figure out what the invert toggle is set to currently
      */
-
     public class InversionMonitor {
 
         private final Context context;
@@ -224,16 +240,6 @@ public class LumenService extends Service {
         }
     }
 
-    public void debug(String msg) {
-        try {
-            java.io.FileWriter fw = new java.io.FileWriter(
-                    getFilesDir() + "/xlumen_debug.txt", true);
-            fw.append(msg + "\n");
-            fw.close();
-        } catch (Exception e) {
-            Log.e(TAG, "debug: ", e);
-        }
-    }
 
 
     // -------------------
@@ -500,23 +506,18 @@ public class LumenService extends Service {
     private final ArrayDeque<String> mappingHistory = new ArrayDeque<>();
 
     private void recordMappingHistory() {
-        int lum = Math.round(
-                LumenState.screenLuminance * 100f);
-
-        int overlay = Math.round(
-                LumenState.overlayOpacity * 100f);
+        int lum     = Math.round(LumenState.screenLuminance * 100f);
+        int overlay = Math.round(LumenState.overlayOpacity  * 100f);
 
         String pair = lum + ":" + overlay;
-        if (pair.equals(lastMappingPair)) {
-            return;
-        }
+        if (pair.equals(lastMappingPair)) return;
         lastMappingPair = pair;
-        mappingHistory.addLast(pair);
-        debug( buildHistoryString() );
 
+        mappingHistory.addLast(pair);
         if (mappingHistory.size() > HISTORY_SIZE) {
-            mappingHistory.removeFirst();
+            mappingHistory.removeFirst();   // trim before logging
         }
+        debug(buildHistoryString());
     }
 
     private String buildHistoryString() {
@@ -551,7 +552,7 @@ public class LumenService extends Service {
         String line2 = buildHistoryString(); // your 47:65 pairs
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("XLumen")
+                .setContentTitle(LumenState.whiteBombActive ? "XLumen [MAX]" : "XLumen")
                 .setContentText(line1)
                 .setStyle(new NotificationCompat.BigTextStyle()
                         .bigText(line1 + "\n" + line2 ))
