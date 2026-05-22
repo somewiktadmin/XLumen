@@ -100,12 +100,15 @@ public class LumenPreferenceFragment extends PreferenceFragment
      * @param requested  true if the user just enabled the toggle
      */
     private void handleWriteSettingsToggle(boolean requested) {
+        XLumenLog.debug("handleWriteSettingsToggle: requested=" + requested);
         if (!requested) return;
         if (Settings.System.canWrite(getActivity())) return;
 
         Intent intent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS);
         intent.setData(Uri.parse("package:" + getActivity().getPackageName()));
         startActivity(intent);
+
+        XLumenLog.debug("handleWriteSettingsToggle: intent=" + intent);
     }
 
     /**

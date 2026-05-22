@@ -140,7 +140,7 @@ public class LumenPrefs {
         try {
             return LumenState.Mode.valueOf(name);
         } catch (IllegalArgumentException e) {
-            return LumenState.Mode.TINT;
+            return LumenState.Mode.GRADIENT;
         }
     }
 

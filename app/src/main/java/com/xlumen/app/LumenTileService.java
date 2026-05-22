@@ -10,32 +10,34 @@ import androidx.annotation.RequiresApi;
 /**
  * XLumen LumenTileService
  *
- * Provides a Quick Settings tile for fast mode switching without
+ * Provides a Quick Settings tile for toggling XLumen on/off without
  * opening the app.  The tile appears in the panel that drops down
  * when the user swipes from the top of the screen.
  *
  * User interaction:
- *   Single tap - cycles through modes in order, or toggles on/off
- *   Long press - opens SettingsActivity directly (Android handles this
- *                automatically if we declare the Settings intent below)
+ *   Single tap - toggles LumenState.enabled on/off.
+ *                If MediaProjection is not yet running, opens MainActivity
+ *                to acquire the permission - cannot be done from a TileService.
+ *   Long press  - opens SettingsActivity directly (Android handles this
+ *                 automatically via the Settings intent declaration).
  *
  * The user must manually add this tile to their Quick Settings panel
- * the first time.  We cannot add it programmatically.
+ * the first time.  It cannot be added programmatically.
  *
  * Tile states:
- *   STATE_ACTIVE   - XLumen is running and applying overlay
- *   STATE_INACTIVE - XLumen is stopped
+ *   STATE_ACTIVE      - XLumen is running and overlay is enabled
+ *   STATE_INACTIVE    - XLumen is running but overlay is disabled
  *   STATE_UNAVAILABLE - accessibility service not enabled yet
  */
 public class LumenTileService extends TileService {
 
-    // -------------------------------------------------------------------------
+    // =========================================================================
     // TileService lifecycle
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
     /**
      * Called when the tile becomes visible in the Quick Settings panel.
-     * Update the tile to reflect current state.
+     * Refreshes tile appearance to reflect current LumenState.
      */
     @RequiresApi(api = Build.VERSION_CODES.Q)
     @Override
@@ -48,68 +50,50 @@ public class LumenTileService extends TileService {
 
     /**
      * Called when the user taps the tile.
-     * If accessibility service is not connected, show main activity instead.
-     * Otherwise toggle enabled state or cycle mode.
+     *
+     * If accessibility service is not connected, opens MainActivity -
+     * the user needs to enable it before anything works.
+     *
+     * If LumenService is not running (no MediaProjection token),
+     * opens MainActivity to acquire the permission.
+     *
+     * Otherwise toggles LumenState.enabled directly.
      */
     @Override
     public void onClick() {
         super.onClick();
 
         if (!LumenAccessibilityService.isConnected()) {
-            // No point starting without the overlay service.
-            // Open main activity so user sees the instructions.
             Intent intent = new Intent(this, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivityAndCollapse(intent);
             return;
         }
 
-        if (!LumenState.enabled) {
-            // Not running -- open main activity to get MediaProjection permission.
-            // We cannot request MediaProjection from a TileService.
+        if (!LumenState.enabled && LumenState.lumi < 0f) {
+            // lumi < 0 means no valid frame yet - service not running.
+            // Must go through MainActivity to get MediaProjection permission.
             Intent intent = new Intent(this, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivityAndCollapse(intent);
             return;
         }
 
-        // Already running -- cycle to next mode.
-        cycleMode();
+        LumenState.enabled = !LumenState.enabled;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             updateTile();
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Mode cycling
-    // -------------------------------------------------------------------------
-
-    /**
-     * Cycles through modes in order.
-     * TINT -> RESPONSIVE -> SCHEDULED -> MEDIA -> NIGHTSHOT -> TINT
-     *
-     * Order is intentional: TINT first as the primary use case,
-     * NIGHTSHOT last as the most aggressive setting.
-     */
-    private void cycleMode() {
-        switch (LumenState.mode) {
-            case TINT:       LumenState.mode = LumenState.Mode.RESPONSIVE; break;
-            case RESPONSIVE: LumenState.mode = LumenState.Mode.SCHEDULED;  break;
-            case SCHEDULED:  LumenState.mode = LumenState.Mode.MEDIA;      break;
-            case MEDIA:      LumenState.mode = LumenState.Mode.NIGHTSHOT;  break;
-            case NIGHTSHOT:  LumenState.mode = LumenState.Mode.TINT;       break;
-        }
-    }
-
-    // -------------------------------------------------------------------------
+    // =========================================================================
     // Tile appearance
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
     /**
-     * Updates tile label, subtitle, and state to reflect LumenState.
+     * Updates tile label, subtitle, and state to reflect current LumenState.
      *
-     * Subtitle is the user's at-a-glance status -- current mode name
-     * and overlay opacity as a percentage.  Fits in ~20 characters.
+     * Subtitle shows current mode name and overlay opacity as a percentage,
+     * fitting in roughly 20 characters for narrow tile displays.
      */
     @RequiresApi(api = Build.VERSION_CODES.Q)
     private void updateTile() {
@@ -130,7 +114,7 @@ public class LumenTileService extends TileService {
             tile.setState(Tile.STATE_INACTIVE);
             tile.setLabel("XLumen");
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                tile.setSubtitle("Stopped");
+                tile.setSubtitle("Off");
             }
             tile.updateTile();
             return;
@@ -139,20 +123,68 @@ public class LumenTileService extends TileService {
         tile.setState(Tile.STATE_ACTIVE);
         tile.setLabel("XLumen");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.setSubtitle(modeName(LumenState.mode) + " - " +
+            tile.setSubtitle(modeName(LumenState.mode) + " " +
                     Math.round(LumenState.overlayOpacity * 100) + "%");
         }
         tile.updateTile();
     }
 
+    /**
+     * Returns a short display name for the current mode.
+     * Only LUMI_GUARD and GRADIENT are fully implemented.
+     * Others are stubs - see LumenState.Mode for TODO versions.
+     *
+     * @param mode  current mode
+     * @return short display label for tile subtitle
+     */
     private String modeName(LumenState.Mode mode) {
         switch (mode) {
-            case TINT:       return "Tint";
-            case RESPONSIVE: return "Responsive";
-            case SCHEDULED:  return "Scheduled";
-            case MEDIA:      return "Media";
-            case NIGHTSHOT:  return "Nightshot";
-            default:         return "Unknown";
+            case LUMI_GUARD:   return "Guard";
+            case GRADIENT:     return "Gradient";
+            default:           return mode.name();
+        }
+    }
+
+    // =========================================================================
+    // Dead code - retained for v2
+    // =========================================================================
+
+    /**
+     * Cycles through all modes in order on each tile tap.
+     *
+     * @deprecated Not used.  Tile tap is now a simple ON/OFF toggle.
+     *             Mode cycling via tile is deferred to v2 when more modes
+     *             are fully implemented.  Do not call.
+     */
+    @Deprecated
+    @SuppressWarnings("unused")
+    private void cycleMode() {
+        switch (LumenState.mode) {
+            case LUMI_GUARD:   LumenState.mode = LumenState.Mode.GRADIENT;    break;
+            case GRADIENT:     LumenState.mode = LumenState.Mode.GPS_DAYLIGHT; break;
+            case GPS_DAYLIGHT: LumenState.mode = LumenState.Mode.POCKET_LOCK;  break;
+            case POCKET_LOCK:  LumenState.mode = LumenState.Mode.PER_APP;      break;
+            case PER_APP:      LumenState.mode = LumenState.Mode.NIGHTSHOOT;   break;
+            case NIGHTSHOOT:   LumenState.mode = LumenState.Mode.LUMI_GUARD;   break;
+        }
+    }
+
+    /**
+     * Returns display name for mode, used by deprecated cycleMode() tile subtitle.
+     *
+     * @deprecated Not used.  See cycleMode() deprecation notice.
+     */
+    @Deprecated
+    @SuppressWarnings("unused")
+    private String modeNameFull(LumenState.Mode mode) {
+        switch (mode) {
+            case LUMI_GUARD:   return "Guard";
+            case GRADIENT:     return "Gradient";
+            case GPS_DAYLIGHT: return "Daylight";
+            case POCKET_LOCK:  return "Pocket";
+            case PER_APP:      return "Per-App";
+            case NIGHTSHOOT:   return "Nightshoot";
+            default:           return "Unknown";
         }
     }
 }

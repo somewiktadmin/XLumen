@@ -90,6 +90,8 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        XLumenLog.init(getFilesDir());
+
         mProjMgr        = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
         mStartBtn = findViewById(R.id.btn_start);
         mStopBtn  = findViewById(R.id.btn_stop);

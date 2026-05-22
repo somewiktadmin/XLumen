@@ -35,30 +35,26 @@ import java.util.ArrayDeque;
  *
  * Responsibilities:
  *   1. Capture screen frames via MediaProjection at a user-configured rate
- *   2. Compute rod-sensitivity-weighted luminance from subsampled pixels
- *   3. Detect flashguard frames and apply protective response
+ *   2. Compute lumi (near-white flash fraction) from sampled pixels
+ *   3. Detect flash events and apply flash guard response
  *   4. Write results to LumenState for LumenAccessibilityService to act on
- *   5. Read light sensor for Mode 3 (RESPONSIVE)
  *
  * This service runs in the foreground and requires a persistent notification.
  * MediaProjection permission must be granted by the user each session -
  * Android re-prompts after every reboot.  This is by design and cannot
  * be suppressed.
  *
- * Scotopic (rod-sensitivity) luminance weights used here, not photopic:
- *   R: 0.06   G: 0.67   B: 0.27
- * Standard luma (photopic) weights for reference:
- *   R: 0.2126  G: 0.7152  B: 0.0722
- * Rod cells peak at ~498nm (blue-green).  The standard blue coefficient
- * dramatically underestimates rod stimulation.  We correct for this.
+ * lumi is the primary sensor output: fraction of sampled pixels with
+ * R > 220, G > 220, B > 220.  Direct proxy for total photon energy
+ * output from screen to eyeball.  See README.md for full rationale.
  */
 public class LumenService extends Service {
 
     private static final String TAG = "XLumen";
 
-    // =====================================
+    // =========================================================================
     // Constants
-    // =====================================
+    // =========================================================================
 
     /** Android notification channel ID.  Must be stable across versions. */
     public static final String CHANNEL_ID = "xlumen_service";
@@ -66,12 +62,12 @@ public class LumenService extends Service {
     /** Foreground notification ID.  Arbitrary, must be non-zero. */
     public static final int NOTIF_ID = 1;
 
-    /** Number of unique lum:overlay pairs retained in the notification history line. */
-    private static final int HISTORY_SIZE = 5;
+    /** Number of unique lumi:overlay pairs retained in notification history line. */
+    private static final int HISTORY_SIZE = 4;
 
-    // =====================================
+    // =========================================================================
     // Fields
-    // =====================================
+    // =========================================================================
 
     private MediaProjection mProjection;
     private VirtualDisplay  mVirtualDisplay;
@@ -79,29 +75,38 @@ public class LumenService extends Service {
     private Handler         mHandler;
     private boolean         mRunning = false;
 
-    /** System.currentTimeMillis() value before which flashguard response is suppressed. */
+    /** System.currentTimeMillis() value before which flash guard response is suppressed. */
     private long mFlashGuardCooldownUntil = 0;
 
-    /** Last lum:overlay pair written to history.  Duplicate suppression. */
+    /** Last lumi:overlay pair written to history.  Duplicate suppression. */
     private String lastMappingPair = "";
 
-    /** Ring buffer of recent unique lum:overlay pairs for notification line 2. */
+    /** Ring buffer of recent unique lumi:overlay pairs for notification line 2. */
     private final ArrayDeque<String> mappingHistory = new ArrayDeque<>();
 
-    // =====================================
-    // debug() - LOGCAT unavailable in Bumblebee; this is the only survivor
-    // =====================================
+    // =========================================================================
+    // debug() - LOGCAT unreliable in Bumblebee; this is the primary trace log
+    // =========================================================================
 
     /**
      * Appends msg to xlumen_debug.txt in app-private files dir.
-     * Called throughout the service for tracing startup, mode changes,
-     * and flashguard events.  LOGCAT is non-functional in this build
-     * environment - this file is the only persistent log.
-     *
-     * Read via MainActivity "Read Debug Log" button.
+     * LOGCAT is unreliable in this build environment - this file is the
+     * primary persistent log.  Read via MainActivity "Read Debug Log" button.
      *
      * @param msg line to append, without trailing newline
      */
+    /**
+     * Thin wrapper around XLumenLog.debug().
+     * Retained for backward compatibility with existing call sites.
+     * New code should call XLumenLog.debug() directly.
+     *
+     * @param msg  line to append, without trailing newline
+     */
+    public void debug(String msg) {
+        XLumenLog.debug(msg);
+    }
+
+    /*
     public void debug(String msg) {
         try {
             java.io.FileWriter fw = new java.io.FileWriter(
@@ -111,22 +116,34 @@ public class LumenService extends Service {
         } catch (Exception e) {
             Log.e(TAG, "debug: ", e);
         }
-    }
+    }*/
 
-    // =====================================
+    // =========================================================================
     // Inner classes
-    // =====================================
+    // =========================================================================
 
     /**
-     * Carries both outputs of a single pixel pass through processFrame().
-     * Avoids acquiring the image twice or splitting luminance and flashguard
-     * detection into separate methods with separate frame acquisitions.
+     * Carries both measurements from a single pixel pass through processFrame().
+     * Pure sensor output - no policy, no threshold comparison.
+     * Policy lives in doSample().
      */
     private static class FrameResult {
-        /** Scotopic-weighted luminance, 0.0..1.0.  -1.0 on failure. */
-        float   luminance;
-        /** True if more than 10% of sampled pixels are near-white (R,G,B > 220). */
-        boolean isFlashing;
+        /**
+         * Fraction of sampled pixels with R > 220, G > 220, B > 220.
+         * Range 0.0-1.0.  Primary driver of all overlay decisions.
+         * -1.0 on acquisition failure.
+         */
+        float lumi;
+
+        /**
+         * Scotopic weighted luminance (R=0.06, G=0.67, B=0.27).
+         *
+         * @deprecated Retained for reference only.  Drives nothing.
+         *             Do not use in any active code path.
+         *             See lumi for the real measurement.
+         */
+        @Deprecated
+        float scotopicLuminance;
     }
 
     /**
@@ -206,9 +223,9 @@ public class LumenService extends Service {
         }
     }
 
-    // =====================================
+    // =========================================================================
     // Lifecycle
-    // =====================================
+    // =========================================================================
 
     /**
      * Entry point when MainActivity fires startForegroundService().
@@ -244,7 +261,7 @@ public class LumenService extends Service {
                 fw.write("LumenService crash: " + e.getClass().getName()
                         + " - " + e.getMessage() + "\n");
                 fw.close();
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {  }
             stopSelf();
         }
 
@@ -272,9 +289,9 @@ public class LumenService extends Service {
         super.onDestroy();
     }
 
-    // =====================================
+    // =========================================================================
     // MediaProjection setup / teardown
-    // =====================================
+    // =========================================================================
 
     /**
      * Initializes the foreground notification, MediaProjection, ImageReader,
@@ -284,8 +301,8 @@ public class LumenService extends Service {
      * must precede getMediaProjection - this ordering is enforced here.
      *
      * VirtualDisplay is created at 1/8 screen resolution.  This is intentional:
-     * full resolution is not needed for luminance or flashguard detection, and
-     * the reduced size cuts pixel processing cost by 64x.
+     * full resolution is not needed for lumi calculation, and the reduced size
+     * cuts pixel processing cost by 64x.
      *
      * @param resultCode     from MediaProjection permission dialog
      * @param data           intent data from MediaProjection permission dialog
@@ -343,9 +360,9 @@ public class LumenService extends Service {
         if (mProjection     != null) { mProjection.stop();        mProjection     = null; }
     }
 
-    // =====================================
+    // =========================================================================
     // Sampling loop
-    // =====================================
+    // =========================================================================
 
     /**
      * Posts the next doSample() call to mHandler after the user-configured interval.
@@ -358,14 +375,14 @@ public class LumenService extends Service {
         int interval = prefs.getSampleIntervalMs();
         debug("scheduleNextSample: interval=" + interval);
         mHandler.postDelayed(this::doSample, interval);
-        //mHandler.postDelayed(this::doSample, prefs.getSampleIntervalMs());
     }
 
     /**
      * Core sample cycle.  Called on mHandler at the configured interval.
      *
      * Calls processFrame() for a single-pass pixel analysis, then branches:
-     *   - flashguard detected and enabled and cooldown expired: applyFlashGuard()
+     *   - lumi > threshold and flash guard enabled and cooldown expired:
+     *     applyFlashGuard()
      *   - otherwise: normal mode logic via updateOverlayFromMode()
      *
      * recordMappingHistory() and updateNotification() run every cycle
@@ -376,11 +393,13 @@ public class LumenService extends Service {
 
         FrameResult result = processFrame();
 
-        if (result.luminance >= 0f) {
-            LumenState.screenLuminance = result.luminance;
+        if (result.lumi >= 0f) {
+            LumenState.lumi = result.lumi;
 
-            LumenPrefs prefs = new LumenPrefs(this);
-            if (prefs.isFlashGuardEnabled() && result.isFlashing) {
+            LumenPrefs prefs   = new LumenPrefs(this);
+            boolean isFlashing = result.lumi > prefs.getThreshold();
+
+            if (prefs.isFlashGuardEnabled() && isFlashing) {
                 long now = System.currentTimeMillis();
                 if (now > mFlashGuardCooldownUntil) {
                     mFlashGuardCooldownUntil = now + prefs.getCooldownMs();
@@ -394,9 +413,11 @@ public class LumenService extends Service {
 
             recordMappingHistory();
 
-            debug("doSample: lum=" + result.luminance
-                    + " isFlashing=" + result.isFlashing
+            /*
+            debug("doSample: lumi=" + String.format(java.util.Locale.US, "%.4f", result.lumi)
+                    + " coolDown=" + mFlashGuardCooldownUntil
                     + " flashGuardEnabled=" + prefs.isFlashGuardEnabled());
+             */
 
         }
 
@@ -406,24 +427,23 @@ public class LumenService extends Service {
 
     /**
      * Acquires one frame from the VirtualDisplay and performs a single pixel
-     * pass computing both scotopic luminance and near-white pixel fraction.
+     * pass computing both lumi and scotopic luminance.
      *
      * Sampling mode is read from LumenPrefs each frame:
-     *   FULL      - every pixel, exhaustive, use for diagnostics
+     *   FULL      - every pixel, exhaustive, use for diagnostics only
      *   STRIDE_65 - one pixel per 65 bytes, linear drift across rows,
      *               roughly 1/64 of pixels, adequate for full-screen events
      *
      * Near-white threshold: R > 220 AND G > 220 AND B > 220.
-     * Flash guard flag set if more than 10% of sampled pixels are near-white.
+     * lumi is the only output that matters.
+     * scotopicLuminance is computed but deprecated - see FrameResult.
      *
-     * Scotopic weights: R=0.06  G=0.67  B=0.27
-     *
-     * @return FrameResult with luminance=-1 on any failure
+     * @return FrameResult with both fields -1 on any acquisition failure
      */
     private FrameResult processFrame() {
-        FrameResult result    = new FrameResult();
-        result.luminance      = -1f;
-        result.isFlashing    = false;
+        FrameResult result            = new FrameResult();
+        result.lumi = -1f;
+        result.scotopicLuminance      = -1f;
 
         try (Image image = mImageReader.acquireLatestImage()) {
             if (image == null) return result;
@@ -469,12 +489,16 @@ public class LumenService extends Service {
 
             if (total == 0) return result;
 
+            // Primary output.  Drives flash guard and overlay in doSample().
+            result.lumi = white / (float) total;
+
+            // Scotopic weighted average - DEPRECATED.  Retained for reference only.
+            // Does not drive anything.  Total photon energy (lumi)
+            // is the honest measurement.  This is the impostor.
             float rAvg = rSum / (float)(total * 255);
             float gAvg = gSum / (float)(total * 255);
             float bAvg = bSum / (float)(total * 255);
-
-            result.luminance   = 0.06f * rAvg + 0.67f * gAvg + 0.27f * bAvg;
-            result.isFlashing = (white * 100 / total) > 10;
+            result.scotopicLuminance = 0.06f * rAvg + 0.67f * gAvg + 0.27f * bAvg;
 
         } catch (Exception e) {
             Log.e(TAG, "processFrame failed: " + e);
@@ -484,21 +508,19 @@ public class LumenService extends Service {
     }
 
     /**
-     * Responds to a detected flashguard frame.
+     * Responds to a detected flash event.
      *
-     * Two simultaneous actions:
-     *   1. Slams overlay to 69% via LumenState - LumenAccessibilityService
-     *      picks this up on its next 100ms tick.
-     *   2. Hammers system screen brightness to the user-configured floor via
-     *      Settings.System.SCREEN_BRIGHTNESS - only if the user has both
-     *      enabled the trust toggle and granted WRITE_SETTINGS permission.
+     * Slams overlay to 69% via LumenState - LumenAccessibilityService
+     * picks this up on its next 100ms tick.
+     *
+     * If the user has enabled brightness control and granted WRITE_SETTINGS,
+     * also hammers system screen brightness to the configured floor.
      *
      * LumenState.flashGuardActive drives the [MAX] title in buildNotification().
-     * Cleared by doSample() when no flashguard is detected and cooldown has expired.
+     * Cleared by doSample() when lumi drops below threshold after cooldown.
      */
     private void applyFlashGuard() {
-        LumenState.overlayOpacity  = 0.69f;
-        LumenState.overlayRedBias  = 0f;
+        LumenState.overlayOpacity   = 0.69f;
         LumenState.flashGuardActive = true;
 
         LumenPrefs prefs = new LumenPrefs(this);
@@ -511,73 +533,73 @@ public class LumenService extends Service {
             );
         }
 
-        debug("applyFlashGuard: overlay=69% brightness=" +
-                prefs.getFlashGuardBrightness());
+        debug("applyFlashGuard: overlay=69% brightness=" + prefs.getFlashGuardBrightness());
         updateNotification();
     }
 
-    // =====================================
+    // =========================================================================
     // Mode logic - writes to LumenState for overlay to consume
-    // =====================================
+    // =========================================================================
 
     /**
-     * Translates current mode and screenLuminance into overlay parameters.
-     * Called every sample cycle when no flashguard response is active.
+     * Translates current mode into overlay opacity.
+     * Called every sample cycle when flash guard is not active.
      *
-     * Gate: if LumenState.enabled is false, zeroes both opacity and redBias
-     * and returns immediately.  LumenAccessibilityService has an independent
-     * gate as well - both must agree before any overlay is applied.
+     * Gate: if LumenState.enabled is false, zeroes opacity and returns.
+     * LumenAccessibilityService has an independent gate as well.
+     * Both must agree before any overlay is applied.
      *
-     * TINT is the primary mode.  Others are stubs pending sensor and
-     * scheduling work.  See TODO comments inside each case.
+     * GRADIENT is the only fully implemented mode.
+     * All others are stubs pending future work - see Mode enum for TODOs.
+     *
+     * NOTE: overlayRedBias is deprecated.  It is not touched here.
+     * It should permanently be 0f.  See LumenState for full deprecation notice.
      */
     private void updateOverlayFromMode() {
         if (!LumenState.enabled) {
             LumenState.overlayOpacity = 0f;
-            LumenState.overlayRedBias = 0f;
             return;
         }
 
         switch (LumenState.mode) {
 
-            case TINT:
-                // Scales 5% to 75% opacity with luminance.
-                // No red bias - warm tint is handled by overlay color in LumenAccessibilityService.
-                LumenState.overlayOpacity = 0.05f + (LumenState.screenLuminance * 0.70f);
-                LumenState.overlayRedBias = 0.0f;
+            case LUMI_GUARD:
+                // Flash guard response is handled in doSample() via applyFlashGuard().
+                // Falls through to GRADIENT behavior when lumi is below threshold.
+                LumenState.overlayOpacity = 0.05f + (LumenState.lumi * 0.44f);
                 break;
 
-            case NIGHTSHOT:
-                // Hard lock.  Maximum overlay, maximum red bias.
-                // No gradual ramp - a single white flash ruins dark adaptation.
-                LumenState.overlayOpacity = 0.75f;
-                LumenState.overlayRedBias = 1.0f;
+            case GRADIENT:
+                // Progressive overlay from 5% at lumi=0 to 49% at lumi=1.0.
+                // Primary everyday mode.
+                LumenState.overlayOpacity = 0.05f + (LumenState.lumi * 0.44f);
                 break;
 
-            case RESPONSIVE:
-                // TODO: drive from light sensor, not screen luminance.
-                // LumenState.ambientLux written by a SensorEventListener.
-                // Placeholder until sensor code is added.
-                LumenState.overlayOpacity = 0.05f;
-                break;
-
-            case SCHEDULED:
-                // TODO: drive from time of day and sunset/sunrise calculation.
+            case GPS_DAYLIGHT:
+                // TODO v2: drive from sunset/sunrise longitude calculation.
                 LumenState.overlayOpacity = 0.15f;
                 break;
 
-            case MEDIA:
-                // Neutral dim only - no red bias.
-                // Opacity driven by luminance, red bias forced to zero.
-                LumenState.overlayOpacity = 0.05f + LumenState.screenLuminance * 0.4f;
-                LumenState.overlayRedBias = 0f;
+            case POCKET_LOCK:
+                // TODO v3: intercept all taps, prevent butt-dial.
+                LumenState.overlayOpacity = 0.05f;
+                break;
+
+            case PER_APP:
+                // TODO v4: per-app blacklist/whitelist, neutral dim only.
+                LumenState.overlayOpacity = 0.05f + LumenState.lumi * 0.4f;
+                break;
+
+            case NIGHTSHOOT:
+                // The phone has an off button.  (TODO v7)
+                LumenState.overlayOpacity = 0.75f;
                 break;
         }
     }
 
-    // =====================================
+    // =========================================================================
     // Notification (shader drop-down)
-    // =====================================
+    // =========================================================================
 
     /**
      * Creates the notification channel on first call.  Safe to call repeatedly -
@@ -604,19 +626,22 @@ public class LumenService extends Service {
     }
 
     /**
-     * Records a lum:overlay pair to the mapping history ring buffer.
+     * Records a lumi:overlay pair to the mapping history ring buffer.
      * Duplicate pairs (same as last recorded) are silently dropped.
      * Buffer is trimmed to HISTORY_SIZE before logging so the debug
      * file reflects exactly what the notification shows.
+     *
+     * lumi is quantized to nearest 5 before recording to reduce noise
+     * and suppress near-duplicate pairs from minor frame variation.
      *
      * History is displayed on notification line 2 as space-separated pairs,
      * e.g.: "45:69 14:15 30:47 12:14"
      */
     private void recordMappingHistory() {
-        int lum     = Math.round(LumenState.screenLuminance * 100f);
-        int overlay = Math.round(LumenState.overlayOpacity  * 100f);
+        int lumi    = Math.round(LumenState.lumi * 100f / 5) * 5;
+        int overlay = Math.round(LumenState.overlayOpacity * 100f);
 
-        String pair = lum + ":" + overlay;
+        String pair = lumi + ":" + overlay;
         if (pair.equals(lastMappingPair)) return;
         lastMappingPair = pair;
 
@@ -630,16 +655,18 @@ public class LumenService extends Service {
     /**
      * Joins the current mapping history into a single space-separated string
      * for display on notification line 2.
+     * Appends -M to the most recent pair when flash guard is active.
      *
-     * @return e.g. "45:69 14:15 30:47" or empty string if no history yet
+     * @return e.g. "45:69-M 14:15 30:47" or empty string if no history yet
      */
     private String buildHistoryString() {
         StringBuilder sb    = new StringBuilder();
         boolean       first = true;
-        for (String pair : mappingHistory) {
+        String[]      pairs = mappingHistory.toArray(new String[0]);
+        for (int i = 0; i < pairs.length; i++) {
             if (!first) sb.append(" ");
-            sb.append(pair);
-            if (first && LumenState.flashGuardActive) sb.append("-M");
+            sb.append(pairs[i]);
+            if (i == pairs.length - 1 && LumenState.flashGuardActive) sb.append("-M");
             first = false;
         }
         return sb.toString();
@@ -648,9 +675,10 @@ public class LumenService extends Service {
     /**
      * Builds the foreground notification shown in the shader drop-down.
      *
-     * Title: "XLumen [MAX]" during flashguard response, "XLumen" otherwise.
-     * Line 1: lum=0.13 overlay=15% invert=off
-     * Line 2: recent unique lum:overlay pairs, space-separated
+     * Title: "XLumen [MAX]" during flash guard response, "XLumen" otherwise.
+     * Line 1: lumi=0.13 overlay=15% invert=off
+     * Line 2: recent unique lumi:overlay pairs, space-separated
+     * Line 3: sysBrightness=187/73%
      *
      * @return fully constructed Notification ready for NotificationManager
      */
@@ -659,32 +687,55 @@ public class LumenService extends Service {
 
         String line1 = String.format(
                 java.util.Locale.US,
-                "lum=%.2f overlay=%d%% %s",
-                LumenState.screenLuminance,
+                "lumi=%.2f overlay=%d%% %s",
+                LumenState.lumi,
                 Math.round(LumenState.overlayOpacity * 100),
                 invertLine
         );
 
         String line2 = buildHistoryString();
 
+        int sysBrightness = -1;
+        try {
+            sysBrightness = android.provider.Settings.System.getInt(
+                    getContentResolver(),
+                    android.provider.Settings.System.SCREEN_BRIGHTNESS);
+        } catch (android.provider.Settings.SettingNotFoundException e) {
+            // unavailable on this device
+        }
+
+        String line3 = sysBrightness >= 0
+                ? String.format(java.util.Locale.US,
+                "sysBrightness=%d/%d%%",
+                sysBrightness,
+                Math.round(sysBrightness / 255f * 100))
+                : "sysBrightness=unavailable";
+
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(LumenState.flashGuardActive ? "XLumen [MAX]" : "XLumen")
                 .setContentText(line1)
                 .setStyle(new NotificationCompat.BigTextStyle()
-                        .bigText(line1 + "\n" + line2))
+                        .bigText(line1 + "\n" + line2 + "\n" + line3))
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setOngoing(true)
                 .build();
     }
 
-    // =====================================
+    // =========================================================================
     // Dead code - retained for reference
-    // =====================================
+    // =========================================================================
 
     /**
      * Original single-pass luminance computation.
-     * Superseded by processFrame(), which combines luminance and flashguard
-     * detection in one pixel pass and supports STRIDE_65 sampling.
+     * Superseded by processFrame(), which combines lumi and scotopic
+     * luminance in one pixel pass and supports STRIDE_65 sampling.
+     *
+     * // Scotopic weighted average - retained for historical reference.
+     * // This approach was considered and set aside in favor of lumi.
+     * // Scotopic weighting models perceptual sensitivity to wavelengths,
+     * // which is academically interesting but not what XLumen needs.
+     * // XLumen measures total photon energy output, not perception.
+     * // The simpler measurement is the honest one.
      *
      * Retained for diffing and fallback reference.  Do not call.
      *
