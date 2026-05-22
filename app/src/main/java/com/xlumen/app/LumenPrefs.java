@@ -41,9 +41,9 @@ public class LumenPrefs {
 
     public static final int     DEFAULT_SAMPLE_INTERVAL_MS   = 100;
     public static final int     DEFAULT_COOLDOWN_MS          = 3000;
-    public static final int     DEFAULT_THRESHOLD            = 10;
+    public static final int     DEFAULT_THRESHOLD            = 40;
     public static final boolean DEFAULT_ENABLED              = false;
-    public static final String  DEFAULT_MODE                 = "TINT";
+    public static final String  DEFAULT_MODE                 = "Guard";
     public static final boolean DEFAULT_FLASHGUARD_ENABLED   = true;
     public static final int     DEFAULT_FLASHGUARD_BRIGHTNESS = 10;
     public static final boolean DEFAULT_WRITE_SETTINGS_TRUSTED = false;

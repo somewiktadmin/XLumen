@@ -1,5 +1,7 @@
 package com.xlumen.app;
 
+import static com.xlumen.app.LumenState.flashGuardActive;
+
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -62,7 +64,10 @@ public class LumenService extends Service {
     /** Foreground notification ID.  Arbitrary, must be non-zero. */
     public static final int NOTIF_ID = 1;
 
-    /** Number of unique lumi:overlay pairs retained in notification history line. */
+    /**
+     *  Number of unique lumi:overlay pairs retained in
+     *  notification shader history line two.
+     */
     private static final int HISTORY_SIZE = 4;
 
     // =========================================================================
@@ -74,6 +79,36 @@ public class LumenService extends Service {
     private ImageReader     mImageReader;
     private Handler         mHandler;
     private boolean         mRunning = false;
+
+    /*
+     * This innocent looking min value is a (hopefully) subtle reminder
+     * to users, that this utility is running.  Fantastic during testing too.
+     */
+    private static final float OVERLAY_FLOOR = 0.05f;
+
+    // GRADIENT mode range.  Ceiling is one sigma (68%) by convention
+    // but may need per-device tuning.
+    private static final float GRADIENT_LUMI_MAX     = 0.5f;
+    private static final float GRADIENT_OVERLAY_CEILING = 0.68f;
+
+    /**
+     * Overlay opacity applied during LUMI_GUARD flash response.
+     *
+     * Derived as one percentage point above GRADIENT_OVERLAY_CEILING,
+     * not hardcoded.  This guarantees a visible step change at the mode
+     * boundary - the user sees an unambiguous slam, not a gentle nudge.
+     *
+     * If GRADIENT_OVERLAY_CEILING is tuned for a specific device,
+     * this value follows automatically.  No magic numbers scattered
+     * across switch cases.
+     *
+     * At GRADIENT_OVERLAY_CEILING=0.68f, this evaluates to 0.69f.
+     * One sigma plus one percent.  The universe approves.
+     */
+    private static final float LUMI_GUARD_OVERLAY =
+            ((int)(GRADIENT_OVERLAY_CEILING * 100) + 1) / 100f;
+
+    private static final float LUMI_QUANTIZE_STEP = 0.10f;
 
     /** System.currentTimeMillis() value before which flash guard response is suppressed. */
     private long mFlashGuardCooldownUntil = 0;
@@ -372,6 +407,15 @@ public class LumenService extends Service {
     private void scheduleNextSample() {
         if (!mRunning) return;
         LumenPrefs prefs = new LumenPrefs(this);
+
+        if (flashGuardActive) {
+            long sleepMs = mFlashGuardCooldownUntil - System.currentTimeMillis();
+            if (sleepMs > 0) {
+                mHandler.postDelayed(this::doSample, sleepMs);
+                return;
+            }
+        }
+
         int interval = prefs.getSampleIntervalMs();
         debug("scheduleNextSample: interval=" + interval);
         mHandler.postDelayed(this::doSample, interval);
@@ -391,33 +435,46 @@ public class LumenService extends Service {
     private void doSample() {
         if (!mRunning) return;
 
+        long now = System.currentTimeMillis();
+
+        if ( (mFlashGuardCooldownUntil > 0) && (now < mFlashGuardCooldownUntil) ) {
+                scheduleNextSample();
+                return; }
+
         FrameResult result = processFrame();
 
         if (result.lumi >= 0f) {
             LumenState.lumi = result.lumi;
 
             LumenPrefs prefs   = new LumenPrefs(this);
-            boolean isFlashing = result.lumi > prefs.getThreshold();
+            float threshold = prefs.getThreshold();
+            float releaseThreshold = flashGuardActive
+                    ? threshold - LUMI_QUANTIZE_STEP
+                    : threshold;
+            boolean isFlashing = result.lumi > releaseThreshold;
+
+            if ( flashGuardActive && (!isFlashing) ) {
+                debug("doSample: drawbridge down - lumi=" + String.format(java.util.Locale.US, "%.4f", result.lumi)
+                        + " releaseThreshold=" + String.format(java.util.Locale.US, "%.4f", releaseThreshold));
+            }
 
             if (prefs.isFlashGuardEnabled() && isFlashing) {
-                long now = System.currentTimeMillis();
                 if (now > mFlashGuardCooldownUntil) {
                     mFlashGuardCooldownUntil = now + prefs.getCooldownMs();
                     applyFlashGuard();
                 }
                 // else: in cooldown, response already latched, do nothing
             } else {
-                LumenState.flashGuardActive = false;
+                flashGuardActive = false;
                 updateOverlayFromMode();
             }
 
             recordMappingHistory();
 
-            /*
+            if (false)
             debug("doSample: lumi=" + String.format(java.util.Locale.US, "%.4f", result.lumi)
                     + " coolDown=" + mFlashGuardCooldownUntil
                     + " flashGuardEnabled=" + prefs.isFlashGuardEnabled());
-             */
 
         }
 
@@ -445,6 +502,16 @@ public class LumenService extends Service {
         result.lumi = -1f;
         result.scotopicLuminance      = -1f;
 
+        // Threshold for near-white pixel detection.
+        // When flash guard is active, overlay darkens each pixel by factor (1 - LUMI_GUARD_OVERLAY).
+        // Compensate by scaling the threshold down proportionally so we detect
+        // pixels that would be near-white without the overlay.
+        // 220 * (1 - 0.69) = 68.2, floored to 68.
+        // Derived from LUMI_GUARD_OVERLAY so it tracks automatically if that constant changes.
+        int wt = flashGuardActive
+                ? (int)(220 * (1f - LUMI_GUARD_OVERLAY))
+                : 220;
+
         try (Image image = mImageReader.acquireLatestImage()) {
             if (image == null) return result;
 
@@ -469,7 +536,7 @@ public class LumenService extends Service {
                         int g   = buf.get(idx + 1) & 0xFF;
                         int b   = buf.get(idx + 2) & 0xFF;
                         rSum += r;  gSum += g;  bSum += b;
-                        if (r > 220 && g > 220 && b > 220) white++;
+                        if (r > wt && g > wt && b > wt) white++;
                         total++;
                     }
                 }
@@ -482,7 +549,7 @@ public class LumenService extends Service {
                     int g = buf.get(pos + 1) & 0xFF;
                     int b = buf.get(pos + 2) & 0xFF;
                     rSum += r;  gSum += g;  bSum += b;
-                    if (r > 220 && g > 220 && b > 220) white++;
+                    if (r > wt && g > wt && b > wt) white++;
                     total++;
                 }
             }
@@ -521,7 +588,7 @@ public class LumenService extends Service {
      */
     private void applyFlashGuard() {
         LumenState.overlayOpacity   = 0.69f;
-        LumenState.flashGuardActive = true;
+        flashGuardActive = true;
 
         LumenPrefs prefs = new LumenPrefs(this);
         if (prefs.isWriteSettingsTrusted()
@@ -566,13 +633,13 @@ public class LumenService extends Service {
             case LUMI_GUARD:
                 // Flash guard response is handled in doSample() via applyFlashGuard().
                 // Falls through to GRADIENT behavior when lumi is below threshold.
-                LumenState.overlayOpacity = 0.05f + (LumenState.lumi * 0.44f);
+                LumenState.overlayOpacity = LUMI_GUARD_OVERLAY ;
                 break;
 
             case GRADIENT:
-                // Progressive overlay from 5% at lumi=0 to 49% at lumi=1.0.
-                // Primary everyday mode.
-                LumenState.overlayOpacity = 0.05f + (LumenState.lumi * 0.44f);
+                LumenState.overlayOpacity = OVERLAY_FLOOR
+                        + (LumenState.lumi / GRADIENT_LUMI_MAX)
+                        * (GRADIENT_OVERLAY_CEILING - OVERLAY_FLOOR);
                 break;
 
             case GPS_DAYLIGHT:
@@ -638,6 +705,7 @@ public class LumenService extends Service {
      * e.g.: "45:69 14:15 30:47 12:14"
      */
     private void recordMappingHistory() {
+        // quantize to nearest 5 - see LUMI_QUANTIZE_STEP
         int lumi    = Math.round(LumenState.lumi * 100f / 5) * 5;
         int overlay = Math.round(LumenState.overlayOpacity * 100f);
 
@@ -666,7 +734,7 @@ public class LumenService extends Service {
         for (int i = 0; i < pairs.length; i++) {
             if (!first) sb.append(" ");
             sb.append(pairs[i]);
-            if (i == pairs.length - 1 && LumenState.flashGuardActive) sb.append("-M");
+            if (i == pairs.length - 1 && flashGuardActive) sb.append("-M");
             first = false;
         }
         return sb.toString();
@@ -706,13 +774,13 @@ public class LumenService extends Service {
 
         String line3 = sysBrightness >= 0
                 ? String.format(java.util.Locale.US,
-                "sysBrightness=%d/%d%%",
+                "sysBrightness=%d (%d%%)",
                 sysBrightness,
                 Math.round(sysBrightness / 255f * 100))
                 : "sysBrightness=unavailable";
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle(LumenState.flashGuardActive ? "XLumen [MAX]" : "XLumen")
+                .setContentTitle(flashGuardActive ? "XLumen [MAX]" : "XLumen")
                 .setContentText(line1)
                 .setStyle(new NotificationCompat.BigTextStyle()
                         .bigText(line1 + "\n" + line2 + "\n" + line3))
