@@ -1,11 +1,16 @@
 package com.xlumen.app;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
-import android.preference.PreferenceFragment;
 import android.provider.Settings;
+
+import androidx.preference.CheckBoxPreference;
+import androidx.preference.EditTextPreference;
+import androidx.preference.ListPreference;
+import androidx.preference.Preference;
+import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.PreferenceScreen;
 
 /**
  * XLumen LumenPreferenceFragment
@@ -13,63 +18,68 @@ import android.provider.Settings;
  * Displays user-configurable settings via a standard Preferences screen.
  * Reads layout from res/xml/preferences.xml.
  *
+ * Extends PreferenceFragmentCompat (androidx) replacing the deprecated
+ * PreferenceFragment.  Requires AppCompatActivity as host - see SettingsActivity.
+ *
  * Settings reload automatically - LumenService re-reads LumenPrefs each
  * sample cycle, so no service restart is needed after changes.
  *
  * Keys here must match LumenPrefs constants exactly.
  */
-public class LumenPreferenceFragment extends PreferenceFragment
-        implements SharedPreferences.OnSharedPreferenceChangeListener {
+public class LumenPreferenceFragment extends PreferenceFragmentCompat
+        implements androidx.preference.Preference.OnPreferenceChangeListener {
 
     @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        addPreferencesFromResource(R.xml.preferences);
+    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+        setPreferencesFromResource(R.xml.preferences, rootKey);
         updateSummaries();
+        wireListeners();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        getPreferenceScreen().getSharedPreferences()
-                .registerOnSharedPreferenceChangeListener(this);
         updateSummaries();
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-        getPreferenceScreen().getSharedPreferences()
-                .unregisterOnSharedPreferenceChangeListener(this);
     }
 
     /**
-     * Fired whenever any preference value changes.
-     * Refreshes all summaries and handles the WRITE_SETTINGS trust toggle
-     * side effect if that specific key changed.
+     * Wires OnPreferenceChangeListener to all preferences so summaries
+     * update immediately when values change.
+     */
+    private void wireListeners() {
+        PreferenceScreen screen = getPreferenceScreen();
+        for (int i = 0; i < screen.getPreferenceCount(); i++) {
+            screen.getPreference(i).setOnPreferenceChangeListener(this);
+        }
+    }
+
+    /**
+     * Called when any preference value changes.
+     * Refreshes summaries and handles WRITE_SETTINGS trust toggle side effect.
      *
-     * @param prefs  the SharedPreferences that changed
-     * @param key    the key that changed
+     * @param preference  the preference that changed
+     * @param newValue    the new value
+     * @return true to persist the new value
      */
     @Override
-    public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-        android.util.Log.d("XLumen", "pref changed key=" + key
-                + " file=" + prefs.toString()
-                + " value=" + prefs.getString(key, "NOT_FOUND"));
+    public boolean onPreferenceChange(Preference preference, Object newValue) {
+        XLumenLog.debug("onPreferenceChange: key=" + preference.getKey()
+                + " value=" + newValue);
         updateSummaries();
-        if (LumenPrefs.KEY_WRITE_SETTINGS_TRUSTED.equals(key)) {
-            handleWriteSettingsToggle(prefs.getBoolean(key, false));
+        if (LumenPrefs.KEY_WRITE_SETTINGS_TRUSTED.equals(preference.getKey())) {
+            handleWriteSettingsToggle((Boolean) newValue);
         }
+        return true;
     }
 
     /**
      * Refreshes all preference summary lines so the user sees current values
      * without opening each preference individually.
      *
-     * Called on onCreate, onResume, and every preference change.
+     * Called on onCreatePreferences, onResume, and every preference change.
      */
     private void updateSummaries() {
-        LumenPrefs p = new LumenPrefs(getActivity());
+        LumenPrefs p = new LumenPrefs(requireActivity());
 
         setSummary(LumenPrefs.KEY_SAMPLE_INTERVAL_MS,
                 p.getSampleIntervalMs() + " ms  (~" +
@@ -84,7 +94,7 @@ public class LumenPreferenceFragment extends PreferenceFragment
         setSummary(LumenPrefs.KEY_FLASHGUARD_BRIGHTNESS,
                 "Brightness floor: " + p.getFlashGuardBrightness() + " / 255");
 
-        boolean canWrite = Settings.System.canWrite(getActivity());
+        boolean canWrite = Settings.System.canWrite(requireActivity());
         setSummary(LumenPrefs.KEY_WRITE_SETTINGS_TRUSTED,
                 canWrite
                         ? "Permission granted.  Brightness control active."
@@ -102,13 +112,11 @@ public class LumenPreferenceFragment extends PreferenceFragment
     private void handleWriteSettingsToggle(boolean requested) {
         XLumenLog.debug("handleWriteSettingsToggle: requested=" + requested);
         if (!requested) return;
-        if (Settings.System.canWrite(getActivity())) return;
+        if (Settings.System.canWrite(requireActivity())) return;
 
         Intent intent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS);
-        intent.setData(Uri.parse("package:" + getActivity().getPackageName()));
-        startActivity(intent);
-
-        XLumenLog.debug("handleWriteSettingsToggle: intent=" + intent);
+        intent.setData(Uri.parse("package:" + requireActivity().getPackageName()));
+        requireActivity().startActivity(intent);
     }
 
     /**
@@ -119,8 +127,9 @@ public class LumenPreferenceFragment extends PreferenceFragment
      * @param summary  summary text to display
      */
     private void setSummary(String key, String summary) {
-        if (findPreference(key) != null) {
-            findPreference(key).setSummary(summary);
+        Preference pref = findPreference(key);
+        if (pref != null) {
+            pref.setSummary(summary);
         }
     }
 }

@@ -417,7 +417,7 @@ public class LumenService extends Service {
         }
 
         int interval = prefs.getSampleIntervalMs();
-        debug("scheduleNextSample: interval=" + interval);
+        if (false) debug("scheduleNextSample: interval=" + interval);
         mHandler.postDelayed(this::doSample, interval);
     }
 
@@ -508,9 +508,10 @@ public class LumenService extends Service {
         // pixels that would be near-white without the overlay.
         // 220 * (1 - 0.69) = 68.2, floored to 68.
         // Derived from LUMI_GUARD_OVERLAY so it tracks automatically if that constant changes.
-        int wt = flashGuardActive
+        /* int wt = flashGuardActive
                 ? (int)(220 * (1f - LUMI_GUARD_OVERLAY))
-                : 220;
+                : 220;*/
+        //int wt = (int)(220 * (1f - LumenState.overlayOpacity));
 
         try (Image image = mImageReader.acquireLatestImage()) {
             if (image == null) return result;
@@ -528,29 +529,53 @@ public class LumenService extends Service {
             long rSum = 0, gSum = 0, bSum = 0;
             long white = 0, total = 0;
 
+            int wt = (int)(220 * (1f - LumenState.overlayOpacity));
+            int bt = 255 - wt;
+            boolean inverted = LumenState.invertEnabled;
+
             if (fullScan) {
-                for (int y = 0; y < h; y++) {
-                    for (int x = 0; x < w; x++) {
-                        int idx = y * rowStride + x * pixelStride;
-                        int r   = buf.get(idx)     & 0xFF;
-                        int g   = buf.get(idx + 1) & 0xFF;
-                        int b   = buf.get(idx + 2) & 0xFF;
-                        rSum += r;  gSum += g;  bSum += b;
-                        if (r > wt && g > wt && b > wt) white++;
-                        total++;
+                if (inverted) {
+                    for (int y = 0; y < h; y++) {
+                        for (int x = 0; x < w; x++) {
+                            int idx = y * rowStride + x * pixelStride;
+                            int r   = buf.get(idx)     & 0xFF;
+                            int g   = buf.get(idx + 1) & 0xFF;
+                            int b   = buf.get(idx + 2) & 0xFF;
+                            if (r < bt && g < bt && b < bt) white++;
+                            total++;
+                        }
+                    }
+                } else {
+                    for (int y = 0; y < h; y++) {
+                        for (int x = 0; x < w; x++) {
+                            int idx = y * rowStride + x * pixelStride;
+                            int r   = buf.get(idx)     & 0xFF;
+                            int g   = buf.get(idx + 1) & 0xFF;
+                            int b   = buf.get(idx + 2) & 0xFF;
+                            if (r > wt && g > wt && b > wt) white++;
+                            total++;
+                        }
                     }
                 }
             } else {
-                // STRIDE_65: one pixel every 65 positions, linear through buffer.
-                // Natural row drift gives decent 2D scatter without block math.
-                int bufLimit = buf.limit();
-                for (int pos = 0; pos + 3 < bufLimit; pos += 65 * pixelStride) {
-                    int r = buf.get(pos)     & 0xFF;
-                    int g = buf.get(pos + 1) & 0xFF;
-                    int b = buf.get(pos + 2) & 0xFF;
-                    rSum += r;  gSum += g;  bSum += b;
-                    if (r > wt && g > wt && b > wt) white++;
-                    total++;
+                if (inverted) {
+                    int bufLimit = buf.limit();
+                    for (int pos = 0; pos + 3 < bufLimit; pos += 65 * pixelStride) {
+                        int r = buf.get(pos)     & 0xFF;
+                        int g = buf.get(pos + 1) & 0xFF;
+                        int b = buf.get(pos + 2) & 0xFF;
+                        if (r < bt && g < bt && b < bt) white++;
+                        total++;
+                    }
+                } else {
+                    int bufLimit = buf.limit();
+                    for (int pos = 0; pos + 3 < bufLimit; pos += 65 * pixelStride) {
+                        int r = buf.get(pos)     & 0xFF;
+                        int g = buf.get(pos + 1) & 0xFF;
+                        int b = buf.get(pos + 2) & 0xFF;
+                        if (r > wt && g > wt && b > wt) white++;
+                        total++;
+                    }
                 }
             }
 
@@ -558,14 +583,6 @@ public class LumenService extends Service {
 
             // Primary output.  Drives flash guard and overlay in doSample().
             result.lumi = white / (float) total;
-
-            // Scotopic weighted average - DEPRECATED.  Retained for reference only.
-            // Does not drive anything.  Total photon energy (lumi)
-            // is the honest measurement.  This is the impostor.
-            float rAvg = rSum / (float)(total * 255);
-            float gAvg = gSum / (float)(total * 255);
-            float bAvg = bSum / (float)(total * 255);
-            result.scotopicLuminance = 0.06f * rAvg + 0.67f * gAvg + 0.27f * bAvg;
 
         } catch (Exception e) {
             Log.e(TAG, "processFrame failed: " + e);
@@ -600,7 +617,7 @@ public class LumenService extends Service {
             );
         }
 
-        debug("applyFlashGuard: overlay=69% brightness=" + prefs.getFlashGuardBrightness());
+        if (false) debug("applyFlashGuard: overlay=69% brightness=" + prefs.getFlashGuardBrightness());
         updateNotification();
     }
 
@@ -710,6 +727,7 @@ public class LumenService extends Service {
         int overlay = Math.round(LumenState.overlayOpacity * 100f);
 
         String pair = lumi + ":" + overlay;
+        //if (mappingHistory.contains(pair)) return;  // reject any duplicate in history
         if (pair.equals(lastMappingPair)) return;
         lastMappingPair = pair;
 

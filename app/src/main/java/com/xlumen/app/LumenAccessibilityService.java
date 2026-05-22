@@ -118,38 +118,20 @@ public class LumenAccessibilityService extends AccessibilityService {
         }
 
         float opacity = Math.min(0.75f, Math.max(0.05f, LumenState.overlayOpacity));
-        float redBias = LumenState.overlayRedBias;
 
         if (opacity <= 0.05f) {
-            redBias = 0.0f;
+            opacity = 0.05f;
         }
 
         int alpha = (int)(opacity * 255);
-        int red   = (int)(redBias * 255);
 
-        mOverlayView.setBackgroundColor(Color.argb(alpha, red, 0, 0));
+        if (LumenState.invertEnabled) {
+            mOverlayView.setBackgroundColor(Color.argb(alpha, 255, 255, 255));
+        } else {
+            mOverlayView.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
+        }
     }
 
-    /*
-    private void applyOverlayState() {
-        if (mOverlayView == null) return;
-
-        float opacity = LumenState.overlayOpacity;
-        float redBias = LumenState.overlayRedBias;
-
-
-        if (opacity <= 0.75f) {
-            // Floor -- neutral dark, no color bias
-            opacity = 0.75f;
-            redBias = 0.0f;
-        }
-
-        int alpha = (int)(opacity * 255);
-        int red   = (int)(redBias * 255);
-
-        mOverlayView.setVisibility(View.VISIBLE);
-        mOverlayView.setBackgroundColor(Color.argb(alpha, red, 0, 0));
-    }*/
 
     // -------------------------------------------------------------------------
     // Update loop
