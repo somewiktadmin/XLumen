@@ -10,6 +10,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.media.Image;
@@ -79,6 +83,10 @@ public class LumenService extends Service {
     private ImageReader     mImageReader;
     private Handler         mHandler;
     private boolean         mRunning = false;
+    private XLumenBrightnessLog mBrightnessLog;
+    private AmbientLightMonitor mAmbientLightMonitor;
+    private InversionMonitor    mInversionMonitor;
+    private int mSavedBrightness     = -1;
 
     /*
      * This innocent looking min value is a (hopefully) subtle reminder
@@ -121,6 +129,7 @@ public class LumenService extends Service {
 
     // =========================================================================
     // debug() - LOGCAT unreliable in Bumblebee; this is the primary trace log
+    // NB: Android Settings, { } Developer Options, LOGGER BUFFER SIZES = 1M
     // =========================================================================
 
     /**
@@ -131,27 +140,13 @@ public class LumenService extends Service {
      * @param msg line to append, without trailing newline
      */
     /**
-     * Thin wrapper around XLumenLog.debug().
-     * Retained for backward compatibility with existing call sites.
-     * New code should call XLumenLog.debug() directly.
+     * Thin wrapper around new XLumenLog.debug().
      *
      * @param msg  line to append, without trailing newline
      */
     public void debug(String msg) {
         XLumenLog.debug(msg);
     }
-
-    /*
-    public void debug(String msg) {
-        try {
-            java.io.FileWriter fw = new java.io.FileWriter(
-                    getFilesDir() + "/xlumen_debug.txt", true);
-            fw.append(msg + "\n");
-            fw.close();
-        } catch (Exception e) {
-            Log.e(TAG, "debug: ", e);
-        }
-    }*/
 
     // =========================================================================
     // Inner classes
@@ -258,6 +253,63 @@ public class LumenService extends Service {
         }
     }
 
+    /**
+     * Monitors the ambient light sensor and writes lux values to
+     * LumenState.ambientLux for use by XLumenBrightnessLog and
+     * eventually GPS_DAYLIGHT mode (TO-DO v2).
+     *
+     * No permission required - TYPE_LIGHT is ungated.
+     * SENSOR_DELAY_NORMAL (~200ms) is sufficient for ambient light tracking.
+     *
+     * Started once in onStartCommand, unregistered in onDestroy.
+     * Lifetime matches service.
+     */
+    public class AmbientLightMonitor {
+
+        private final SensorManager mSensorManager;
+        private final SensorEventListener mListener;
+
+        /**
+         * @param context  service context, used to get SensorManager
+         */
+        public AmbientLightMonitor(Context context) {
+            mSensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
+
+            mListener = new SensorEventListener() {
+                @Override
+                public void onSensorChanged(SensorEvent event) {
+                    LumenState.ambientLux = event.values[0];
+                }
+                @Override
+                public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+            };
+        }
+
+        /**
+         * Registers the light sensor listener.
+         * Call from onStartCommand() after XLumenLog.init().
+         */
+        public void start() {
+            Sensor lightSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
+            if (lightSensor == null) {
+                XLumenLog.debug("AmbientLightMonitor: no light sensor on this device");
+                return;
+            }
+            mSensorManager.registerListener(mListener, lightSensor,
+                    SensorManager.SENSOR_DELAY_NORMAL);
+            XLumenLog.debug("AmbientLightMonitor.start(): light sensor registered");
+        }
+
+        /**
+         * Unregisters the light sensor listener.
+         * Call from onDestroy().
+         */
+        public void stop() {
+            mSensorManager.unregisterListener(mListener);
+        }
+    }
+
+
     // =========================================================================
     // Lifecycle
     // =========================================================================
@@ -300,7 +352,11 @@ public class LumenService extends Service {
             stopSelf();
         }
 
-        new InversionMonitor(this).start();
+        mInversionMonitor = new InversionMonitor(this);
+        mInversionMonitor.start();
+        mAmbientLightMonitor = new AmbientLightMonitor(this);
+        mAmbientLightMonitor.start();
+        mBrightnessLog = new XLumenBrightnessLog(this);
 
         return START_REDELIVER_INTENT;
     }
@@ -321,6 +377,8 @@ public class LumenService extends Service {
     public void onDestroy() {
         mRunning = false;
         tearDownProjection();
+        mInversionMonitor.stop();
+        mAmbientLightMonitor.stop();
         super.onDestroy();
     }
 
@@ -399,22 +457,15 @@ public class LumenService extends Service {
     // Sampling loop
     // =========================================================================
 
+
     /**
      * Posts the next doSample() call to mHandler after the user-configured interval.
      * Re-reads prefs each cycle so interval changes take effect immediately
-     * without restarting the service.
+     * without restarting the service. TODO: make them restart service (just warn on settings screen)
      */
     private void scheduleNextSample() {
         if (!mRunning) return;
         LumenPrefs prefs = new LumenPrefs(this);
-
-        if (flashGuardActive) {
-            long sleepMs = mFlashGuardCooldownUntil - System.currentTimeMillis();
-            if (sleepMs > 0) {
-                mHandler.postDelayed(this::doSample, sleepMs);
-                return;
-            }
-        }
 
         int interval = prefs.getSampleIntervalMs();
         if (false) debug("scheduleNextSample: interval=" + interval);
@@ -426,7 +477,7 @@ public class LumenService extends Service {
      *
      * Calls processFrame() for a single-pass pixel analysis, then branches:
      *   - lumi > threshold and flash guard enabled and cooldown expired:
-     *     applyFlashGuard()
+     *     "applyFlashGuard"
      *   - otherwise: normal mode logic via updateOverlayFromMode()
      *
      * recordMappingHistory() and updateNotification() run every cycle
@@ -437,33 +488,71 @@ public class LumenService extends Service {
 
         long now = System.currentTimeMillis();
 
-        if ( (mFlashGuardCooldownUntil > 0) && (now < mFlashGuardCooldownUntil) ) {
-                scheduleNextSample();
-                return; }
+        if ((mFlashGuardCooldownUntil > 0) && (now < mFlashGuardCooldownUntil)) {
+            scheduleNextSample();
+            return;
+        }
 
         FrameResult result = processFrame();
+
+        LumenPrefs prefs = new LumenPrefs(this);
 
         if (result.lumi >= 0f) {
             LumenState.lumi = result.lumi;
 
-            LumenPrefs prefs   = new LumenPrefs(this);
             float threshold = prefs.getThreshold();
             float releaseThreshold = flashGuardActive
                     ? threshold - LUMI_QUANTIZE_STEP
                     : threshold;
             boolean isFlashing = result.lumi > releaseThreshold;
 
-            if ( flashGuardActive && (!isFlashing) ) {
-                debug("doSample: drawbridge down - lumi=" + String.format(java.util.Locale.US, "%.4f", result.lumi)
-                        + " releaseThreshold=" + String.format(java.util.Locale.US, "%.4f", releaseThreshold));
-            }
+            //releaseFlashGuard()
+            if (flashGuardActive && (!isFlashing)) {
+                flashGuardActive = false;
 
+                debug("doSample: MAX release - lumi=" + String.format(java.util.Locale.US, "%.4f", result.lumi)
+                        + " releaseThreshold=" + String.format(java.util.Locale.US, "%.4f", releaseThreshold));
+
+                if ( prefs.isWriteSettingsTrusted() && Settings.System.canWrite(this) ) {
+                    if (mSavedBrightness >= 0) { Settings.System.putInt(getContentResolver(),
+                                Settings.System.SCREEN_BRIGHTNESS, mSavedBrightness); }
+                    Settings.System.putInt(getContentResolver(),
+                            Settings.System.SCREEN_BRIGHTNESS_MODE,
+                            1); //SCREEN_BRIGHTNESS_MODE_AUTOMATIC
+                }
+            } //end releaseFlashGuard()
+
+            //applyFlashGuard()
             if (prefs.isFlashGuardEnabled() && isFlashing) {
                 if (now > mFlashGuardCooldownUntil) {
                     mFlashGuardCooldownUntil = now + prefs.getCooldownMs();
-                    applyFlashGuard();
-                }
-                // else: in cooldown, response already latched, do nothing
+                    LumenState.overlayOpacity   = 0.69f;
+                    flashGuardActive = true;
+
+                    try {
+                        mSavedBrightness = Settings.System.getInt(getContentResolver(),
+                                Settings.System.SCREEN_BRIGHTNESS );
+                    } catch (Settings.SettingNotFoundException e) {
+                        XLumenLog.debug("applyFlashGuard: SCREEN_BRIGHTNESS not found, " + e.getMessage() );
+                    }
+                    if (prefs.isWriteSettingsTrusted()
+                            && android.provider.Settings.System.canWrite(this)) {
+                        Settings.System.putInt(getContentResolver(),
+                                Settings.System.SCREEN_BRIGHTNESS_MODE,
+                                0); //SCREEN_BRIGHTNESS_MODE_MANUAL
+                        android.provider.Settings.System.putInt(
+                                getContentResolver(),
+                                android.provider.Settings.System.SCREEN_BRIGHTNESS,
+                                prefs.getFlashGuardBrightness()
+                        );
+                    }
+
+                    if (false) debug("applyFlashGuard: overlay=69% brightness="
+                            + prefs.getFlashGuardBrightness());
+                    updateNotification();
+                } //end applyFlashGuard()
+
+            // else: in cooldown, response already latched, do nothing
             } else {
                 flashGuardActive = false;
                 updateOverlayFromMode();
@@ -472,13 +561,14 @@ public class LumenService extends Service {
             recordMappingHistory();
 
             if (false)
-            debug("doSample: lumi=" + String.format(java.util.Locale.US, "%.4f", result.lumi)
-                    + " coolDown=" + mFlashGuardCooldownUntil
-                    + " flashGuardEnabled=" + prefs.isFlashGuardEnabled());
+                debug("doSample: lumi=" + String.format(java.util.Locale.US, "%.4f", result.lumi)
+                        + " coolDown=" + mFlashGuardCooldownUntil
+                        + " flashGuardEnabled=" + prefs.isFlashGuardEnabled());
 
         }
 
         updateNotification();
+        mBrightnessLog.maybelog(prefs);
         scheduleNextSample();
     }
 
@@ -604,21 +694,7 @@ public class LumenService extends Service {
      * Cleared by doSample() when lumi drops below threshold after cooldown.
      */
     private void applyFlashGuard() {
-        LumenState.overlayOpacity   = 0.69f;
-        flashGuardActive = true;
 
-        LumenPrefs prefs = new LumenPrefs(this);
-        if (prefs.isWriteSettingsTrusted()
-                && android.provider.Settings.System.canWrite(this)) {
-            android.provider.Settings.System.putInt(
-                    getContentResolver(),
-                    android.provider.Settings.System.SCREEN_BRIGHTNESS,
-                    prefs.getFlashGuardBrightness()
-            );
-        }
-
-        if (false) debug("applyFlashGuard: overlay=69% brightness=" + prefs.getFlashGuardBrightness());
-        updateNotification();
     }
 
     // =========================================================================
@@ -648,7 +724,7 @@ public class LumenService extends Service {
         switch (LumenState.mode) {
 
             case LUMI_GUARD:
-                // Flash guard response is handled in doSample() via applyFlashGuard().
+                // Flash guard response is handled in doSample() was "applyFlashGuard"
                 // Falls through to GRADIENT behavior when lumi is below threshold.
                 LumenState.overlayOpacity = LUMI_GUARD_OVERLAY ;
                 break;
@@ -705,6 +781,7 @@ public class LumenService extends Service {
      * affects the notification display.
      */
     private void updateNotification() {
+        //TODO: Settings choice for STFU
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.notify(NOTIF_ID, buildNotification());
     }
@@ -735,7 +812,7 @@ public class LumenService extends Service {
         if (mappingHistory.size() > HISTORY_SIZE) {
             mappingHistory.removeFirst();
         }
-        debug(buildHistoryString());
+        buildHistoryString();
     }
 
     /**
@@ -790,12 +867,22 @@ public class LumenService extends Service {
             // unavailable on this device
         }
 
+        String sysAdaptBright = ""; //Settings.System.SCREEN_BRIGHTNESS_MODE
+        try {
+            sysAdaptBright = android.provider.Settings.System.getString(
+                    getContentResolver(),
+                    Settings.System.SCREEN_BRIGHTNESS_MODE);
+        } catch (Exception e) {
+            Log.e("XLumen", String.valueOf(e));
+        }
+
         String line3 = sysBrightness >= 0
                 ? String.format(java.util.Locale.US,
                 "sysBrightness=%d (%d%%)",
                 sysBrightness,
                 Math.round(sysBrightness / 255f * 100))
                 : "sysBrightness=unavailable";
+        line3 += " " + sysAdaptBright;
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(flashGuardActive ? "XLumen [MAX]" : "XLumen")

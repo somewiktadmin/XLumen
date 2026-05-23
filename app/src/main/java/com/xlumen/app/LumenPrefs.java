@@ -36,11 +36,11 @@ public class LumenPrefs {
     public static final String KEY_PIXEL_SAMPLE_MODE       = "pixel_sample_mode";
 
     // =========================================================================
-    // Defaults
+    // Defaults (Only valid when there is a typo in preferences.xml)
     // =========================================================================
 
     public static final int     DEFAULT_SAMPLE_INTERVAL_MS   = 100;
-    public static final int     DEFAULT_COOLDOWN_MS          = 3000;
+    public static final int     DEFAULT_COOLDOWN_MS          = 1000;
     public static final int     DEFAULT_THRESHOLD            = 40;
     public static final boolean DEFAULT_ENABLED              = false;
     public static final String  DEFAULT_MODE                 = "Guard";
@@ -53,10 +53,18 @@ public class LumenPrefs {
     // Bounds
     // =========================================================================
 
-    public static final int MIN_SAMPLE_INTERVAL_MS = 3; //pretty pointless, where thrashing begins
-    public static final int MAX_SAMPLE_INTERVAL_MS = 9999; //testing only = 999, norm is 333
+    public static final int MIN_SAMPLE_INTERVAL_MS = 10; //pretty pointless, where thrashing begins
+    public static final int MAX_SAMPLE_INTERVAL_MS = 999; //at 999 one per sec is too jarring
     public static final int MIN_COOLDOWN_MS        = 500;
-    public static final int MAX_COOLDOWN_MS        = 30000;
+    public static final int MAX_COOLDOWN_MS        = 5000;
+
+    // =========================================================================
+    // Brightness log of system values
+    // =========================================================================
+
+    public static final String KEY_BRIGHTNESS_LOG_INTERVAL_MS = "brightness_log_interval_ms";
+    public static final int    DEFAULT_BRIGHTNESS_LOG_INTERVAL_MS = 60000; // 1 minute
+    // 0 = OFF, 60_000 = 1 min, 300_000 = 5 min, 900_000 = 15 min, 1800_000 = 30 min
 
     // =========================================================================
 
@@ -193,6 +201,22 @@ public class LumenPrefs {
      */
     public String getPixelSampleMode() {
         return mPrefs.getString(KEY_PIXEL_SAMPLE_MODE, DEFAULT_PIXEL_SAMPLE_MODE);
+    }
+
+    /**
+     * How often XLumenBrightnessLog writes a brightness calibration record.
+     * 0 = disabled.  Stored as string by ListPreference.
+     *
+     * @return interval in milliseconds, or 0 if logging is disabled
+     */
+    public int getBrightnessLogIntervalMs() {
+        String s = mPrefs.getString(KEY_BRIGHTNESS_LOG_INTERVAL_MS,
+                String.valueOf(DEFAULT_BRIGHTNESS_LOG_INTERVAL_MS));
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return DEFAULT_BRIGHTNESS_LOG_INTERVAL_MS;
+        }
     }
 
     // =========================================================================

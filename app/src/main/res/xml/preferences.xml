@@ -43,22 +43,22 @@
     <EditTextPreference
         android:key="sample_interval_ms"
         android:title="Sample interval (ms)"
-        android:summary="100ms default"
-        android:defaultValue="100"
+        android:summary="50ms default"
+        android:defaultValue="50"
         android:inputType="number" />
 
     <EditTextPreference
         android:key="cooldown_ms"
         android:title="Flash guard cooldown (ms)"
-        android:summary="3000ms default"
-        android:defaultValue="3000"
+        android:summary="1000ms default"
+        android:defaultValue="1000"
         android:inputType="number" />
 
     <EditTextPreference
         android:key="threshold"
         android:title="Flash trigger threshold (%)"
-        android:summary="10% default"
-        android:defaultValue="10"
+        android:summary="45% default"
+        android:defaultValue="45"
         android:inputType="number" />
 
     <CheckBoxPreference
@@ -66,13 +66,6 @@
         android:title="Flash guard"
         android:summary="Slam overlay and brightness on sudden bright flash"
         android:defaultValue="true" />
-
-    <EditTextPreference
-        android:key="flashguard_brightness"
-        android:title="Flash guard brightness floor (0-255)"
-        android:summary="System brightness slammed to this on trigger.  Default: 10"
-        android:defaultValue="10"
-        android:inputType="number" />
 
     <ListPreference
         android:key="pixel_sample_mode"
@@ -87,5 +80,20 @@
         android:title="Allow system brightness control"
         android:summary="Requires &apos;Modify system settings&apos; permission.  Tap to enable, then grant in the system dialog that follows."
         android:defaultValue="false" />
+
+    <EditTextPreference
+        android:key="flashguard_brightness"
+        android:title="Flash guard brightness floor (0-255)"
+        android:summary="System brightness slammed to this on trigger.  Default: 1"
+        android:defaultValue="1"
+        android:inputType="number" />
+
+    <ListPreference
+        android:key="brightness_log_interval_ms"
+        android:title="Brightness calibration log interval"
+        android:summary="Log brightness and overlay data for calibration."
+        android:entries="@array/brightness_log_interval_entries"
+        android:entryValues="@array/brightness_log_interval_values"
+        android:defaultValue="60000" />
 
 </PreferenceScreen>
