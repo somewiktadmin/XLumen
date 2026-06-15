@@ -44,6 +44,10 @@ public class LumenState {
     // --- Foreground app package (PER_APP, TODO v4) ---
     public static volatile String foregroundPackage = "";
 
+    /** Raw system screen brightness (0-255).  0 if unavailable.
+     *  Read each sample cycle in LumenService.doSample(). */
+    public static volatile int sysBrightness = 0;
+
     // =========================================================================
     // Dead code - retained for reference
     // =========================================================================

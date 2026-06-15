@@ -22,7 +22,7 @@ import android.widget.TextView;
  *   3. Show a11y service status and instructions
  *   4. Launch SettingsActivity
  *
- * Startup sequence enforced by this activity:
+ * Startup sequence enforced by google + android:
  *   1. A11y service must be enabled by user in Settings > Accessibility > XLumen
  *   2. Start button becomes active only after a11y service confirms connected
  *   3. MediaProjection permission requested only after user taps Start

@@ -107,7 +107,7 @@ public class LumenAccessibilityService extends AccessibilityService {
      // The “68–95–99.7 rule”    68.27, 95.45, 99.74
      //TODO: This service is malfunctioning.  (Settings accessibility page)
      //Does my screen-reading read the value before or after overlay is applied?
-     //TODO: phone-in-pocket, intercept all taps, no-butt-dial
+     //TODO: V3,0 phone-in-pocket, intercept all taps, no-butt-dial
      */
     private void applyOverlayState() {
         if (mOverlayView == null) return;
@@ -119,6 +119,12 @@ public class LumenAccessibilityService extends AccessibilityService {
 
         float opacity = Math.min(0.75f, Math.max(0.05f, LumenState.overlayOpacity));
 
+        /* If system set backlight mostly up, we're at the beach, so don't slam as hard. */
+        if (LumenState.sysBrightness > 127) {
+            opacity *= 0.5f;
+        }
+
+        /* Floor value cannot be triffled with.  Permanent user reminder. */
         if (opacity <= 0.05f) {
             opacity = 0.05f;
         }

@@ -858,13 +858,13 @@ public class LumenService extends Service {
 
         String line2 = buildHistoryString();
 
-        int sysBrightness = -1;
+        LumenState.sysBrightness = 0;
         try {
-            sysBrightness = android.provider.Settings.System.getInt(
+            LumenState.sysBrightness = android.provider.Settings.System.getInt(
                     getContentResolver(),
                     android.provider.Settings.System.SCREEN_BRIGHTNESS);
         } catch (android.provider.Settings.SettingNotFoundException e) {
-            // unavailable on this device
+            LumenState.sysBrightness = 0;
         }
 
         String sysAdaptBright = ""; //Settings.System.SCREEN_BRIGHTNESS_MODE
@@ -876,11 +876,11 @@ public class LumenService extends Service {
             Log.e("XLumen", String.valueOf(e));
         }
 
-        String line3 = sysBrightness >= 0
+        String line3 = LumenState.sysBrightness >= 0
                 ? String.format(java.util.Locale.US,
                 "sysBrightness=%d (%d%%)",
-                sysBrightness,
-                Math.round(sysBrightness / 255f * 100))
+                LumenState.sysBrightness,
+                Math.round(LumenState.sysBrightness / 255f * 100))
                 : "sysBrightness=unavailable";
         line3 += " " + sysAdaptBright;
 

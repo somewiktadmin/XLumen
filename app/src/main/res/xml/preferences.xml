@@ -96,4 +96,10 @@
         android:entryValues="@array/brightness_log_interval_values"
         android:defaultValue="60000" />
 
+    <EditTextPreference
+        android:key="outdoor_threshold"
+        android:title="Outdoor threshold (sysBrightness 0 to 255)"
+        android:defaultValue="127"
+        android:inputType="number" />
+
 </PreferenceScreen>
