@@ -8,7 +8,6 @@ package com.xlumen.app;
  * Same JVM, same process.  This is intentional.
  *
  * Primary sensor output is lumi - see field comment below.
- * scotopicLuminance is retained as dead code reference only.
  */
 public class LumenState {
 
@@ -47,6 +46,9 @@ public class LumenState {
     /** Raw system screen brightness (0-255).  0 if unavailable.
      *  Read each sample cycle in LumenService.doSample(). */
     public static volatile int sysBrightness = 0;
+
+    /* True is system ambient light adaptation is turned on */
+    public static volatile String sysAdaptBright = "";
 
     // =========================================================================
     // Dead code - retained for reference

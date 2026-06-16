@@ -85,9 +85,6 @@ public class LumenTileService extends TileService {
         }
     }
 
-    // =========================================================================
-    // Tile appearance
-    // =========================================================================
 
     /**
      * Updates tile label, subtitle, and state to reflect current LumenState.
@@ -123,68 +120,9 @@ public class LumenTileService extends TileService {
         tile.setState(Tile.STATE_ACTIVE);
         tile.setLabel("XLumen");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.setSubtitle(modeName(LumenState.mode) + " " +
-                    Math.round(LumenState.overlayOpacity * 100) + "%");
+            tile.setSubtitle("LumiGuard " + Math.round(LumenState.overlayOpacity * 100) + "%");
         }
         tile.updateTile();
     }
 
-    /**
-     * Returns a short display name for the current mode.
-     * Only LUMI_GUARD and GRADIENT are fully implemented.
-     * Others are stubs - see LumenState.Mode for TODO versions.
-     *
-     * @param mode  current mode
-     * @return short display label for tile subtitle
-     */
-    private String modeName(LumenState.Mode mode) {
-        switch (mode) {
-            case LUMI_GUARD:   return "Guard";
-            case GRADIENT:     return "Gradient";
-            default:           return mode.name();
-        }
-    }
-
-    // =========================================================================
-    // Dead code - retained for v2
-    // =========================================================================
-
-    /**
-     * Cycles through all modes in order on each tile tap.
-     *
-     * @deprecated Not used.  Tile tap is now a simple ON/OFF toggle.
-     *             Mode cycling via tile is deferred to v2 when more modes
-     *             are fully implemented.  Do not call.
-     */
-    @Deprecated
-    @SuppressWarnings("unused")
-    private void cycleMode() {
-        switch (LumenState.mode) {
-            case LUMI_GUARD:   LumenState.mode = LumenState.Mode.GRADIENT;    break;
-            case GRADIENT:     LumenState.mode = LumenState.Mode.GPS_DAYLIGHT; break;
-            case GPS_DAYLIGHT: LumenState.mode = LumenState.Mode.POCKET_LOCK;  break;
-            case POCKET_LOCK:  LumenState.mode = LumenState.Mode.PER_APP;      break;
-            case PER_APP:      LumenState.mode = LumenState.Mode.NIGHTSHOOT;   break;
-            case NIGHTSHOOT:   LumenState.mode = LumenState.Mode.LUMI_GUARD;   break;
-        }
-    }
-
-    /**
-     * Returns display name for mode, used by deprecated cycleMode() tile subtitle.
-     *
-     * @deprecated Not used.  See cycleMode() deprecation notice.
-     */
-    @Deprecated
-    @SuppressWarnings("unused")
-    private String modeNameFull(LumenState.Mode mode) {
-        switch (mode) {
-            case LUMI_GUARD:   return "Guard";
-            case GRADIENT:     return "Gradient";
-            case GPS_DAYLIGHT: return "Daylight";
-            case POCKET_LOCK:  return "Pocket";
-            case PER_APP:      return "Per-App";
-            case NIGHTSHOOT:   return "Nightshoot";
-            default:           return "Unknown";
-        }
-    }
 }

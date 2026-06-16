@@ -137,9 +137,6 @@ public class LumenService extends Service {
      * LOGCAT is unreliable in this build environment - this file is the
      * primary persistent log.  Read via MainActivity "Read Debug Log" button.
      *
-     * @param msg line to append, without trailing newline
-     */
-    /**
      * Thin wrapper around new XLumenLog.debug().
      *
      * @param msg  line to append, without trailing newline
@@ -165,15 +162,6 @@ public class LumenService extends Service {
          */
         float lumi;
 
-        /**
-         * Scotopic weighted luminance (R=0.06, G=0.67, B=0.27).
-         *
-         * @deprecated Retained for reference only.  Drives nothing.
-         *             Do not use in any active code path.
-         *             See lumi for the real measurement.
-         */
-        @Deprecated
-        float scotopicLuminance;
     }
 
     /**
@@ -590,7 +578,6 @@ public class LumenService extends Service {
     private FrameResult processFrame() {
         FrameResult result            = new FrameResult();
         result.lumi = -1f;
-        result.scotopicLuminance      = -1f;
 
         // Threshold for near-white pixel detection.
         // When flash guard is active, overlay darkens each pixel by factor (1 - LUMI_GUARD_OVERLAY).
@@ -598,10 +585,6 @@ public class LumenService extends Service {
         // pixels that would be near-white without the overlay.
         // 220 * (1 - 0.69) = 68.2, floored to 68.
         // Derived from LUMI_GUARD_OVERLAY so it tracks automatically if that constant changes.
-        /* int wt = flashGuardActive
-                ? (int)(220 * (1f - LUMI_GUARD_OVERLAY))
-                : 220;*/
-        //int wt = (int)(220 * (1f - LumenState.overlayOpacity));
 
         try (Image image = mImageReader.acquireLatestImage()) {
             if (image == null) return result;
@@ -712,8 +695,6 @@ public class LumenService extends Service {
      * GRADIENT is the only fully implemented mode.
      * All others are stubs pending future work - see Mode enum for TODOs.
      *
-     * NOTE: overlayRedBias is deprecated.  It is not touched here.
-     * It should permanently be 0f.  See LumenState for full deprecation notice.
      */
     private void updateOverlayFromMode() {
         if (!LumenState.enabled) {
@@ -742,7 +723,7 @@ public class LumenService extends Service {
 
             case POCKET_LOCK:
                 // TODO v3: intercept all taps, prevent butt-dial.
-                LumenState.overlayOpacity = 0.05f;
+                LumenState.overlayOpacity = 1f; //0.05f;
                 break;
 
             case PER_APP:
@@ -782,8 +763,9 @@ public class LumenService extends Service {
      */
     private void updateNotification() {
         //TODO: Settings choice for STFU
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        nm.notify(NOTIF_ID, buildNotification());
+        //NotificationManager nm = getSystemService(NotificationManager.class);
+        //nm.notify(NOTIF_ID, buildNotification());
+        buildNotification();
     }
 
     /**
@@ -850,26 +832,26 @@ public class LumenService extends Service {
 
         String line1 = String.format(
                 java.util.Locale.US,
-                "lumi=%.2f overlay=%d%% %s",
-                LumenState.lumi,
+                "lumi=%d overlay=%d%% %s",
+                (Math.round(LumenState.lumi * 100f / 5) * 5),
                 Math.round(LumenState.overlayOpacity * 100),
                 invertLine
         );
 
         String line2 = buildHistoryString();
 
-        LumenState.sysBrightness = 0;
+        //LumenState.sysBrightness = 0; //no, use last known value instead
         try {
             LumenState.sysBrightness = android.provider.Settings.System.getInt(
                     getContentResolver(),
                     android.provider.Settings.System.SCREEN_BRIGHTNESS);
         } catch (android.provider.Settings.SettingNotFoundException e) {
-            LumenState.sysBrightness = 0;
+            //LumenState.sysBrightness = 0; //fukno, leave at last known value
         }
 
-        String sysAdaptBright = ""; //Settings.System.SCREEN_BRIGHTNESS_MODE
+        LumenState.sysAdaptBright = ""; //Settings.System.SCREEN_BRIGHTNESS_MODE
         try {
-            sysAdaptBright = android.provider.Settings.System.getString(
+            LumenState.sysAdaptBright = android.provider.Settings.System.getString(
                     getContentResolver(),
                     Settings.System.SCREEN_BRIGHTNESS_MODE);
         } catch (Exception e) {
@@ -882,16 +864,18 @@ public class LumenService extends Service {
                 LumenState.sysBrightness,
                 Math.round(LumenState.sysBrightness / 255f * 100))
                 : "sysBrightness=unavailable";
-        line3 += " " + sysAdaptBright;
+        line3 += " " + LumenState.sysAdaptBright;
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(flashGuardActive ? "XLumen [MAX]" : "XLumen")
                 .setContentText(line1)
                 .setStyle(new NotificationCompat.BigTextStyle()
-                        .bigText(line1 + "\n" + line2 + "\n" + line3))
+                        .bigText(line1 + "\n" + line3))
+                        //.bigText(line1 + "\n" + line2 + "\n" + line3))
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setOngoing(true)
                 .build();
+
     }
 
     // =========================================================================
