@@ -73,5 +73,3 @@ LumenTileService      - Quick Settings tile, mode cycling
 - **POCKET_LOCK** - ambient light sensor driven. butt-dial prevention, blocks taps when pocketed (TODO v3)
 - **PER_APP** - per-app blacklist/whitelist (TODO v4)
 - **DESKTOP** - port to Chromebook, Windows, Mac (TODO v5)
-- **NIGHTSHOOT** - phone has an off button (TODO v7)
-- 
