@@ -81,9 +81,9 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
     }
 
 
-    // -------------------------------------------------------------------------
+    //
     // Lifecycle
-    // -------------------------------------------------------------------------
+    //
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -105,13 +105,13 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         mA11yWarningText     = findViewById(R.id.txt_a11y_warning);
 
         // Open top-level accessibility settings.
-        // Safest cross-version approach -- user finds XLumen in the list manually.
+        // Safest cross-version approach - user finds XLumen in the list manually.
         mOpenA11ySettingsBtn.setOnClickListener(v ->
                 startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
         );
 
         // Attempt to open XLumen-specific a11y page directly.
-        // Undocumented deep link -- Google has broken this in some Android versions.
+        // Undocumented deep link - Google has broken this in some Android versions.
         // Falls back to top-level settings if deep link fails.
         mOpenA11yXLumenBtn.setOnClickListener(v -> {
             try {
@@ -120,7 +120,7 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
                         "com.xlumen.app/.LumenAccessibilityService");
                 startActivity(intent);
             } catch (Exception e) {
-                // Deep link failed -- fall back to top-level settings silently.
+                // Deep link failed - fall back to top-level settings silently.
                 // User will need to find XLumen in the list manually.
                 debug("A11y deep link failed, falling back to top-level settings: "
                         + e.getMessage());
@@ -195,9 +195,9 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         updateA11yStatus();
     }
 
-    // -------------------------------------------------------------------------
+    //
     // Start / stop
-    // -------------------------------------------------------------------------
+    //
 
     private void onStartClicked() {
         // Gate: do not request MediaProjection if service already running.
@@ -252,14 +252,14 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
     }
 
 
-    // -------------------------------------------------------------------------
+    //
     // A11y service status and UI gating
-    // -------------------------------------------------------------------------
+    //
 
     /**
      * Checks whether LumenAccessibilityService is connected and updates UI accordingly.
      * The user must enable it manually in Settings > Accessibility > XLumen.
-     * We cannot enable it programmatically -- this is intentional by Google.
+     * We cannot enable it programmatically - this is intentional by Google.
      *
      * Side effect: enables or disables Start button based on a11y service state.
      * Start button must never be active before a11y service is confirmed connected.
@@ -268,7 +268,7 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
 
     private void updateA11yStatus() {
         if (LumenAccessibilityService.isConnected()) {
-            // A11y connected -- hide setup buttons, show MediaProjection pre-warning.
+            // A11y connected - hide setup buttons, show MediaProjection pre-warning.
             mA11yStatusText.setText("Accessibility service: active");
             mA11yWarningText.setVisibility(android.view.View.VISIBLE);
             mA11yWarningText.setText(
@@ -304,7 +304,7 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
             }
 
         } else {
-            // A11y not connected -- show setup instructions, disable Start button.
+            // A11y not connected - show setup instructions, disable Start button.
             mA11yStatusText.setText(
                     "Step 1: Tap below to open Accessibility Settings.  " +
                             "Find XLumen in the list and turn it on.  " +
@@ -328,9 +328,9 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Help dialogs -- stub, not yet wired to buttons
-    // -------------------------------------------------------------------------
+    //
+    // Help dialogs - stub, not yet wired to buttons
+    //
 
     /**
      * TODO: wire to [More Info] button on pre-a11y warning screen.
@@ -355,7 +355,7 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
     "with your Android version and phone model."
     */
         throw new UnsupportedOperationException(
-                "showA11yHelpDialog not yet implemented -- see TODO above"
+                "showA11yHelpDialog not yet implemented - see TODO above"
         );
     }
 
@@ -385,7 +385,7 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
     "code yourself.  It is public at github.com/somewiktadmin/XLumen"
     */
         throw new UnsupportedOperationException(
-                "showMediaProjectionHelpDialog not yet implemented -- see TODO above"
+                "showMediaProjectionHelpDialog not yet implemented - see TODO above"
         );
     }
 

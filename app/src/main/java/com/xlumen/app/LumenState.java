@@ -11,20 +11,20 @@ package com.xlumen.app;
  */
 public class LumenState {
 
-    // --- Master switch ---
+    // - Master switch -
     public static volatile boolean enabled = false;
 
-    // --- Current toggle of a11y Color Invert ---
+    // - Current toggle of a11y Color Invert -
     public static volatile boolean invertEnabled = false;
 
-    // --- Current mode ---
+    // - Current mode -
     public static volatile Mode mode = Mode.GRADIENT;
 
-    // --- Overlay parameters ---
+    // - Overlay parameters -
     /** opacity: 0.0 = invisible, 1.0 = fully opaque */
     public static volatile float overlayOpacity = 0.05f;
 
-    // --- lumi: the real measurement ---
+    // - lumi: the real measurement -
     /**
      * Fraction of sampled screen pixels with R > 220, G > 220, B > 220.
      * Range 0.0-1.0.  Direct proxy for total photon energy output from
@@ -33,14 +33,14 @@ public class LumenState {
      */
     public static volatile float lumi = -1f;
 
-    // --- Flash guard ---
+    // - Flash guard -
     /** True while flash guard response is active and cooldown has not expired. */
     public static volatile boolean flashGuardActive = false;
 
-    // --- Ambient light (GPS_DAYLIGHT, TODO v2) ---
+    // - Ambient light (GPS_DAYLIGHT, TODO v2) -
     public static volatile float ambientLux = -1f;
 
-    // --- Foreground app package (PER_APP, TODO v4) ---
+    // - Foreground app package (PER_APP, TODO v4) -
     public static volatile String foregroundPackage = "";
 
     /** Raw system screen brightness (0-255).  0 if unavailable.
@@ -50,9 +50,9 @@ public class LumenState {
     /* True is system ambient light adaptation is turned on */
     public static volatile String sysAdaptBright = "";
 
-    // =========================================================================
+    // =====================================
     // Dead code - retained for reference
-    // =========================================================================
+    // =====================================
 
     /**
      * Scotopic weighted luminance (R=0.06, G=0.67, B=0.27).
@@ -78,7 +78,7 @@ public class LumenState {
     @Deprecated
     public static volatile float overlayRedBias = 0f;
 
-    // --- Modes ---
+    // - Modes -
     public enum Mode {
         LUMI_GUARD,   // Mode 1: soul of the app.  lumi > threshold triggers [MAX] response.
         GRADIENT,     // Mode 2: progressive overlay scaling with lumi, 5% to 49%

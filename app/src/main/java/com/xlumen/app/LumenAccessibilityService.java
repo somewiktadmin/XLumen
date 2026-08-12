@@ -43,9 +43,9 @@ public class LumenAccessibilityService extends AccessibilityService {
     private static final int UPDATE_INTERVAL_MS = 100;
     private final android.os.Handler mHandler = new android.os.Handler();
 
-    // -------------------------------------------------------------------------
+    //
     // Custom overlay view - dim layer + watermark text in one onDraw()
-    // -------------------------------------------------------------------------
+    //
 
     /**
      * Full-screen overlay view.
@@ -148,9 +148,9 @@ public class LumenAccessibilityService extends AccessibilityService {
         }
     }
 
-    // -------------------------------------------------------------------------
+    //
     // Lifecycle
-    // -------------------------------------------------------------------------
+    //
 
     @Override
     public void onServiceConnected() {
@@ -184,9 +184,9 @@ public class LumenAccessibilityService extends AccessibilityService {
         return super.onUnbind(intent);
     }
 
-    // -------------------------------------------------------------------------
+    //
     // Overlay
-    // -------------------------------------------------------------------------
+    //
 
     private void createOverlay() {
         mOverlayView = new OverlayView(this);
@@ -254,9 +254,9 @@ public class LumenAccessibilityService extends AccessibilityService {
         }
     }
 
-    // -------------------------------------------------------------------------
+    //
     // Update loop
-    // -------------------------------------------------------------------------
+    //
 
     private void scheduleUpdate() {
         mHandler.postDelayed(() -> {
@@ -265,9 +265,9 @@ public class LumenAccessibilityService extends AccessibilityService {
         }, UPDATE_INTERVAL_MS);
     }
 
-    // -------------------------------------------------------------------------
+    //
     // Static accessor
-    // -------------------------------------------------------------------------
+    //
 
     public static boolean isConnected() {
         return sInstance != null;
