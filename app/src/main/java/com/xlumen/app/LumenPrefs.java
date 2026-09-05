@@ -21,9 +21,7 @@ public class LumenPrefs {
     //private static final String PREFS_NAME = "xlumen_prefs";
     private static final String PREFS_NAME = "com.xlumen.app_preferences";
 
-    // =========================================================================
     // Keys - must match preferences.xml exactly
-    // =========================================================================
 
     public static final String KEY_SAMPLE_INTERVAL_MS      = "sample_interval_ms";
     public static final String KEY_COOLDOWN_MS             = "cooldown_ms";
@@ -35,9 +33,7 @@ public class LumenPrefs {
     public static final String KEY_WRITE_SETTINGS_TRUSTED  = "write_settings_trusted";
     public static final String KEY_PIXEL_SAMPLE_MODE       = "pixel_sample_mode";
 
-    // =========================================================================
     // Defaults (Only valid when there is a typo in preferences.xml)
-    // =========================================================================
 
     public static final int     DEFAULT_SAMPLE_INTERVAL_MS   = 100;
     public static final int     DEFAULT_COOLDOWN_MS          = 1000;
@@ -49,24 +45,19 @@ public class LumenPrefs {
     public static final boolean DEFAULT_WRITE_SETTINGS_TRUSTED = false;
     public static final String  DEFAULT_PIXEL_SAMPLE_MODE    = "STRIDE_65";
 
-    // =========================================================================
     // Bounds
-    // =========================================================================
 
     public static final int MIN_SAMPLE_INTERVAL_MS = 10; //pretty pointless, where thrashing begins
     public static final int MAX_SAMPLE_INTERVAL_MS = 999; //at 999 one per sec is too jarring
     public static final int MIN_COOLDOWN_MS        = 500;
     public static final int MAX_COOLDOWN_MS        = 5000;
 
-    // =========================================================================
     // Brightness log of system values
-    // =========================================================================
 
     public static final String KEY_BRIGHTNESS_LOG_INTERVAL_MS = "brightness_log_interval_ms";
     public static final int    DEFAULT_BRIGHTNESS_LOG_INTERVAL_MS = 60000; // 1 minute
     // 0 = OFF, 60_000 = 1 min, 300_000 = 5 min, 900_000 = 15 min, 1800_000 = 30 min
 
-    // =========================================================================
 
     private final SharedPreferences mPrefs;
 
@@ -77,9 +68,7 @@ public class LumenPrefs {
         mPrefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
-    // =========================================================================
     // Getters
-    // =========================================================================
 
     /**
      * How often LumenService grabs and processes a screen frame.
@@ -219,9 +208,7 @@ public class LumenPrefs {
         }
     }
 
-    // =========================================================================
     // Helpers
-    // =========================================================================
 
     /**
      * Reads a SharedPreferences key as string and parses to int.

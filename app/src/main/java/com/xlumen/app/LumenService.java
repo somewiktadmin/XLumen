@@ -58,9 +58,7 @@ public class LumenService extends Service {
 
     private static final String TAG = "XLumen";
 
-    // =========================================================================
     // Constants
-    // =========================================================================
 
     /** Android notification channel ID.  Must be stable across versions. */
     public static final String CHANNEL_ID = "xlumen_service";
@@ -74,9 +72,7 @@ public class LumenService extends Service {
      */
     private static final int HISTORY_SIZE = 4;
 
-    // =========================================================================
     // Fields
-    // =========================================================================
 
     private MediaProjection mProjection;
     private VirtualDisplay  mVirtualDisplay;
@@ -127,10 +123,10 @@ public class LumenService extends Service {
     /** Ring buffer of recent unique lumi:overlay pairs for notification line 2. */
     private final ArrayDeque<String> mappingHistory = new ArrayDeque<>();
 
-    // =========================================================================
+    //
     // debug() - LOGCAT unreliable in Bumblebee; this is the primary trace log
     // NB: Android Settings, { } Developer Options, LOGGER BUFFER SIZES = 1M
-    // =========================================================================
+    //
 
     /**
      * Appends msg to xlumen_debug.txt in app-private files dir.
@@ -145,9 +141,7 @@ public class LumenService extends Service {
         XLumenLog.debug(msg);
     }
 
-    // =========================================================================
     // Inner classes
-    // =========================================================================
 
     /**
      * Carries both measurements from a single pixel pass through processFrame().
@@ -298,10 +292,6 @@ public class LumenService extends Service {
     }
 
 
-    // =========================================================================
-    // Lifecycle
-    // =========================================================================
-
     /**
      * Entry point when MainActivity fires startForegroundService().
      * Enforces startup sequence: projection first, then sampling loop,
@@ -370,9 +360,9 @@ public class LumenService extends Service {
         super.onDestroy();
     }
 
-    // =========================================================================
+    //
     // MediaProjection setup / teardown
-    // =========================================================================
+    //
 
     /**
      * Initializes the foreground notification, MediaProjection, ImageReader,
@@ -441,10 +431,9 @@ public class LumenService extends Service {
         if (mProjection     != null) { mProjection.stop();        mProjection     = null; }
     }
 
-    // =========================================================================
+    //
     // Sampling loop
-    // =========================================================================
-
+    //
 
     /**
      * Posts the next doSample() call to mHandler after the user-configured interval.
@@ -680,9 +669,9 @@ public class LumenService extends Service {
 
     }
 
-    // =========================================================================
+    //
     // Mode logic - writes to LumenState for overlay to consume
-    // =========================================================================
+    //
 
     /**
      * Translates current mode into overlay opacity.
@@ -738,9 +727,9 @@ public class LumenService extends Service {
         }
     }
 
-    // =========================================================================
+    //
     // Notification (shader drop-down)
-    // =========================================================================
+    //
 
     /**
      * Creates the notification channel on first call.  Safe to call repeatedly -
@@ -878,60 +867,4 @@ public class LumenService extends Service {
 
     }
 
-    // =========================================================================
-    // Dead code - retained for reference
-    // =========================================================================
-
-    /**
-     * Original single-pass luminance computation.
-     * Superseded by processFrame(), which combines lumi and scotopic
-     * luminance in one pixel pass and supports STRIDE_65 sampling.
-     *
-     * // Scotopic weighted average - retained for historical reference.
-     * // This approach was considered and set aside in favor of lumi.
-     * // Scotopic weighting models perceptual sensitivity to wavelengths,
-     * // which is academically interesting but not what XLumen needs.
-     * // XLumen measures total photon energy output, not perception.
-     * // The simpler measurement is the honest one.
-     *
-     * Retained for diffing and fallback reference.  Do not call.
-     *
-     * @deprecated superseded by processFrame()
-     */
-    @Deprecated
-    @SuppressWarnings("unused")
-    private float computeScreenLuminance() {
-        try (Image image = mImageReader.acquireLatestImage()) {
-            if (image == null) return -1f;
-
-            Image.Plane plane  = image.getPlanes()[0];
-            ByteBuffer  buf    = plane.getBuffer();
-            int         stride = plane.getRowStride();
-            int         w      = image.getWidth();
-            int         h      = image.getHeight();
-
-            long rSum = 0, gSum = 0, bSum = 0, count = 0;
-            for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                    int idx = y * stride + x * 4;
-                    rSum += (buf.get(idx)     & 0xFF);
-                    gSum += (buf.get(idx + 1) & 0xFF);
-                    bSum += (buf.get(idx + 2) & 0xFF);
-                    count++;
-                }
-            }
-
-            if (count == 0) return -1f;
-
-            float rAvg = rSum / (float)(count * 255);
-            float gAvg = gSum / (float)(count * 255);
-            float bAvg = bSum / (float)(count * 255);
-
-            return 0.06f * rAvg + 0.67f * gAvg + 0.27f * bAvg;
-
-        } catch (Exception e) {
-            Log.e(TAG, "computeScreenLuminance failed: " + e);
-            return -1f;
-        }
-    }
 }

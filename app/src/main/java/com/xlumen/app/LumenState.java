@@ -50,9 +50,9 @@ public class LumenState {
     /* True is system ambient light adaptation is turned on */
     public static volatile String sysAdaptBright = "";
 
-    // =====================================
+    //
     // Dead code - retained for reference
-    // =====================================
+    //
 
     /**
      * Scotopic weighted luminance (R=0.06, G=0.67, B=0.27).

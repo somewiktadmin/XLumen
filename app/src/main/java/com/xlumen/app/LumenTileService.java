@@ -31,10 +31,6 @@ import androidx.annotation.RequiresApi;
  */
 public class LumenTileService extends TileService {
 
-    // =========================================================================
-    // TileService lifecycle
-    // =========================================================================
-
     /**
      * Called when the tile becomes visible in the Quick Settings panel.
      * Refreshes tile appearance to reflect current LumenState.
@@ -75,7 +71,7 @@ public class LumenTileService extends TileService {
             // Must go through MainActivity to get MediaProjection permission.
             Intent intent = new Intent(this, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivityAndCollapse(intent);
+                startActivityAndCollapse(intent);
             return;
         }
 
